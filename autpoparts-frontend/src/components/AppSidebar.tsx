@@ -32,9 +32,10 @@ import { LucideProps } from "lucide-react";
 interface AppSidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
+  user: { user_name?: string } | null; // Added user prop
 }
 
-export function AppSidebar({ activeView, onViewChange }: AppSidebarProps) {
+export function AppSidebar({ activeView, onViewChange, user}: AppSidebarProps) {
   interface MenuItem {
     title: string;
     icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;

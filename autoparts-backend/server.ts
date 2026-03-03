@@ -9,7 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Database Connection
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -17,7 +16,6 @@ const db = mysql.createConnection({
   database: process.env.DB_NAME,
 });
 
-// Verify Connection
 db.connect((err) => {
   if (err) {
     console.error('Error connecting to MySQL:', err);
@@ -26,129 +24,153 @@ db.connect((err) => {
   console.log('Connected to MySQL Database.');
 });
 
-// 1. Basic Route for Sales Data
-app.get('/api/sales', (req, res) => {
-  const sqlSelect = "SELECT * FROM sales_reports";
-  db.query(sqlSelect, (err, result) => {
-    if (err) return res.status(500).send(err);
-    res.send(result);
-  });
+
+// Consolidation: Single Registration Route
+app.post('/api/register', (req, res) => {
+    const { email, password, companyName, businessAddress } = req.body;
+    const sqlBusiness = `
+        INSERT INTO companies (company_name, business_address, email, password_hash) 
+        VALUES (?, ?, ?, ?)
+    `;
+    db.query(sqlBusiness, [companyName, businessAddress || "Main Office", email, password], (err, result) => {
+        if (err) return res.status(500).json({ message: "Registration failed: " + err.message });
+        res.status(200).json({ 
+            role: 'admin', 
+            company_id: (result as any).insertId, 
+            email 
+        });
+    });
 });
 
-// Updated route in autoparts-backend/server.ts
-app.post('/api/inventory', (req, res) => {
-    const { name, category, sku, currentStock, unitCost } = req.body;
+// Consolidation: Single Login Route that checks both tables
+app.post('/api/login', (req, res) => {
+    const { email, password } = req.body;
+    const checkOwner = "SELECT * FROM companies WHERE email = ? AND password_hash = ?";
     
-    const company_id = 1; 
-    const min_stock = 10;
-    const supplier_id = 1; // Default numeric ID to match your schema
+    db.query(checkOwner, [email, password], (err, ownerResult: any) => {
+        if (err) return res.status(500).send(err);
+        if (ownerResult.length > 0) {
+            return res.json({ 
+                role: 'admin', 
+                company_id: ownerResult[0].company_id, 
+                email: ownerResult[0].email,
+                user_name: ownerResult[0].company_name 
+            });
+        }
+
+        const checkStaff = "SELECT * FROM users WHERE email = ? AND password_hash = ?";
+        db.query(checkStaff, [email, password], (err, staffResult: any) => {
+            if (err) return res.status(500).send(err);
+            if (staffResult.length > 0) {
+                return res.json({ 
+                    role: 'staff', 
+                    company_id: staffResult[0].company_id, 
+                    email: staffResult[0].email,
+                    user_id: staffResult[0].user_id,
+                    user_name: staffResult[0].full_name
+                });
+            }
+            res.status(401).json({ message: "Invalid email or password" });
+        });
+    });
+});
+
+
+app.get('/api/inventory', (req, res) => {
+    const { company_id } = req.query; // The backend looks for the ID here
+    
+    // This SQL ensures only that company's data is returned
+    const sqlSelect = "SELECT * FROM inventory WHERE company_id = ?"; 
+    
+    db.query(sqlSelect, [company_id], (err, result) => {
+        if (err) return res.status(500).send(err);
+        res.send(result);
+    });
+});
+
+app.post('/api/inventory', (req, res) => {
+    const { 
+        product_name, category, current_stock, unit_cost, 
+        status, company_id, min_stock, sku, supplier, location 
+    } = req.body;
 
     const sqlInsert = `
         INSERT INTO inventory 
-        (company_id, sku, product_name, category, current_stock, min_stock, unit_cost, supplier_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (product_name, category, current_stock, unit_cost, status, company_id, min_stock, sku, supplier, location) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
-    db.query(sqlInsert, [company_id, sku, name, category, currentStock, min_stock, unitCost, supplier_id], (err, result) => {
-        if (err) {
-            console.error("Database Error:", err);
-            return res.status(500).json({ error: err.message });
+    db.query(sqlInsert, 
+        [product_name, category, current_stock, unit_cost, status, company_id, min_stock, sku, supplier, location], 
+        (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(200).json({ message: "Saved", id: (result as any).insertId });
         }
-        res.status(200).json({ message: "Success", id: (result as any).insertId });
+    );
+});
+
+// Consolidation: Single Update route with Logging
+app.put('/api/inventory/:id', (req, res) => {
+    // 1. Strip 'INV' prefix if it exists to match numeric product_id in MySQL
+    const productId = req.params.id.replace('INV', '');
+    
+    // 2. Destructure all fields including those for activity logging
+    const { 
+        product_name, 
+        category, 
+        current_stock, 
+        unit_cost, 
+        status, 
+        user_id, 
+        user_name, 
+        role 
+    } = req.body;
+
+    const sqlUpdate = `
+        UPDATE inventory 
+        SET product_name = ?, category = ?, current_stock = ?, unit_cost = ?, status = ?
+        WHERE product_id = ?
+    `;
+
+    // 3. Execute product update
+    db.query(sqlUpdate, [product_name, category, current_stock, unit_cost, status, productId], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // 4. LOGGING: Record who made the change for the Decision Support System audit
+        const actorType = role === 'admin' ? 'Owner' : 'Staff';
+        const logMsg = `${actorType} ${user_name} updated product ID ${productId}`;
+        const sqlLog = "INSERT INTO activity_logs (user_id, action_details) VALUES (?, ?)";
+        
+        db.query(sqlLog, [user_id || 0, logMsg], (logErr) => {
+            if (logErr) {
+                console.error("Logging failed:", logErr);
+                // We still send 200 because the inventory update itself succeeded
+            }
+            res.status(200).json({ message: "Updated and Logged" });
+        });
     });
 });
 
-// Add this to your autoparts-backend/server.ts
-app.put('/api/inventory/:id', (req, res) => {
-    const productId = req.params.id.replace('INV', '');
-    // Destructure the names coming from your frontend updates
-    const { name, category, sku, currentStock, minimumStock, unitCost, status } = req.body;
-
-    const sqlUpdate = `
-        UPDATE inventory 
-        SET product_name = ?, category = ?, sku = ?, current_stock = ?, min_stock = ?, unit_cost = ?, status = ?
-        WHERE product_id = ?
-    `;
-
-    db.query(
-        sqlUpdate, 
-        [name, category, sku, currentStock, minimumStock, unitCost, status, productId], 
-        (err, result) => {
-            if (err) {
-                console.error("Database Update Error:", err);
-                return res.status(500).json({ error: err.message });
-            }
-            res.status(200).json({ message: "Updated successfully" });
-        }
-    );
-});
-
-// Add this to your autoparts-backend/server.ts
-app.put('/api/inventory/:id', (req, res) => {
-    // 1. Get the numeric ID from the INV00X string
-    const productId = req.params.id.replace('INV', '');
-    
-    // 2. Destructure the data sent from the frontend
-    const { name, category, sku, currentStock, minimumStock, unitCost, status } = req.body;
-
-    // 3. SQL Query using snake_case to match your MySQL schema
-    const sqlUpdate = `
-        UPDATE inventory 
-        SET product_name = ?, category = ?, sku = ?, current_stock = ?, min_stock = ?, unit_cost = ?, status = ?
-        WHERE product_id = ?
-    `;
-
-    db.query(
-        sqlUpdate, 
-        [name, category, sku, currentStock, minimumStock, unitCost, status, productId], 
-        (err, result) => {
-            if (err) {
-                console.error("Database Update Error:", err);
-                return res.status(500).json({ error: err.message });
-            }
-            res.status(200).json({ message: "Updated successfully" });
-        }
-    );
-});
-
-// Add this to your autoparts-backend/server.ts
 app.delete('/api/inventory/:id', (req, res) => {
-    const productId = req.params.id;
-    // We must extract the number from your 'INV001' format
-    const numericId = productId.replace('INV', '');
-
+    const numericId = req.params.id.replace('INV', '');
     const sqlDelete = "DELETE FROM inventory WHERE product_id = ?";
-    
-    db.query(sqlDelete, [numericId], (err, result) => {
-        if (err) {
-            console.error("Database Delete Error:", err);
-            return res.status(500).json({ error: err.message });
-        }
-        res.status(200).json({ message: "Deleted successfully from Database" });
+    db.query(sqlDelete, [numericId], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(200).json({ message: "Deleted successfully" });
     });
 });
 
-// 3. Basic Login Route 
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body;
-  const sqlSelect = "SELECT * FROM users WHERE email = ? AND password_hash = ?";
-  
-  db.query(sqlSelect, [email, password], (err, result) => {
-    if (err) return res.status(500).send(err);
-    if (Array.isArray(result) && result.length > 0) {
-      res.send(result[0]); // Returns user info including 'role'
-    } else {
-      res.status(401).send({ message: "Wrong email/password combination!" });
-    }
-  });
-});
+// --- STAFF ROUTES ---
 
-app.get('/api/inventory', (req, res) => {
-    // In a multi-tenant system, we filter by company_id
-    const sqlSelect = "SELECT * FROM inventory"; 
-    db.query(sqlSelect, (err, result) => {
-        if (err) return res.status(500).send(err);
-        res.send(result);
+app.post('/api/staff', (req, res) => {
+    const { full_name, email, password, company_id } = req.body;
+    const sqlStaff = `
+        INSERT INTO users (company_id, full_name, email, password_hash, role) 
+        VALUES (?, ?, ?, ?, 'staff')
+    `;
+    db.query(sqlStaff, [company_id, full_name, email, password], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(200).json({ message: "Staff account created successfully!" });
     });
 });
 

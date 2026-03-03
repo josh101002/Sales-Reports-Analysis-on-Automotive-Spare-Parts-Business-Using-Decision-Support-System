@@ -8,7 +8,6 @@ export interface InventoryItem {
   sku: string;
   currentStock: number;
   minimumStock: number;
-  reorderPoint: number;
   unitCost: number;
   supplier: string;
   location: string;
@@ -25,143 +24,158 @@ interface InventoryContextType {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-const getStatus = (current: number, min: number, reorder: number): string => {
-  // Convert to numbers to ensure math works
+const getStatus = (current: number, min: number): string => {
   const currentStock = Number(current);
   const minStock = Number(min);
-  const reorderPoint = Number(reorder);
 
-  if (currentStock <= minStock) return "Critical"; // Changed for safety
-  if (currentStock <= reorderPoint) return "Low Stock";
+  if (currentStock <= minStock) return "Critical"; 
   return "In Stock";
 };
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
-  // Load Data from Database
-  useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/inventory');
-        if (response.ok) {
-          const data = await response.json();
-          // Inside InventoryContext.tsx -> fetchInventory mapping
-        // Inside fetchInventory in InventoryContext.tsx
-        const formattedData = data.map((item: any) => {
-          // Use the actual DB values for math
-          const current = Number(item.current_stock);
-          const min = Number(item.min_stock);
-          const reorder = min * 1.2;
+  const fetchInventory = async () => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const companyId = savedUser.company_id;
 
-          return {
-            id: `INV${String(item.product_id).padStart(3, '0')}`,
-            name: item.product_name,
-            category: item.category,
-            sku: item.sku,
-            currentStock: current,
-            minimumStock: min, // <--- FIX: Stop hardcoding 300
-            reorderPoint: reorder,
-            unitCost: item.unit_cost,
-            supplier: item.supplier_name || "N/A",
-            status: getStatus(current, min, reorder) // Calculate correctly
-          };
-        });
-          
-          setInventory(formattedData);
-        }
-      } catch (error) {
-        console.error("Error loading inventory:", error);
-      }
-    };
+    if (!companyId) {
+      setInventory([]); 
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/inventory?company_id=${companyId}`);
+      const data = await response.json();
+      
+      const mappedData = data.map((item: any) => ({
+        id: `INV${String(item.product_id).padStart(3, '0')}`,
+        name: item.product_name,        
+        category: item.category,
+        sku: item.sku || "",
+        currentStock: Number(item.current_stock), 
+        minimumStock: Number(item.min_stock),
+        unitCost: Number(item.unit_cost),
+        supplier: item.supplier || "",
+        status: item.status,
+        location: item.location || ""
+      }));
+      
+      setInventory(mappedData);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+    }
+  };
+
+  // Listen for both initial mount and account switches
+  useEffect(() => {
     fetchInventory();
+    
+    // Custom listener for login events triggered from App.tsx
+    const handleReFetch = () => fetchInventory();
+    window.addEventListener("userLogin", handleReFetch);
+    
+    return () => window.removeEventListener("userLogin", handleReFetch);
   }, []);
 
-  // Updated addProduct with Database connection
   const addProduct = async (product: Omit<InventoryItem, "id" | "status">) => {
     try {
+      const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const companyId = savedUser.company_id;
+
+      if (!companyId) return;
+
+      const payload = { 
+        product_name: product.name,    
+        category: product.category,
+        current_stock: Number(product.currentStock), 
+        unit_cost: Number(product.unitCost),         
+        status: getStatus(product.currentStock, product.minimumStock),
+        company_id: companyId,
+        min_stock: Number(product.minimumStock),
+        sku: product.sku,
+        supplier: product.supplier,
+        location: product.location
+      };
+
       const response = await fetch('http://localhost:5000/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(product),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         const result = await response.json();
-        
-        // Use the ID returned from MySQL for the local state
         const newProduct: InventoryItem = {
           ...product,
           id: `INV${String(result.id).padStart(3, '0')}`,
-          status: getStatus(product.currentStock, product.minimumStock, product.reorderPoint)
+          status: payload.status
         };
-        
-        setInventory([...inventory, newProduct]);
-        console.log("Product saved to database successfully!");
-      } else {
-        console.error("Failed to save to database");
+        setInventory(prev => [...prev, newProduct]);
       }
     } catch (error) {
       console.error("Error adding product:", error);
     }
   };
 
-const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
-  const itemToUpdate = inventory.find(i => i.id === id);
-  if (!itemToUpdate) return;
+  const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
+    // 1. STRIP PREFIX: Convert "INV014" to "14" so the DB can find it
+    const numericId = id.replace('INV', '').replace(/^0+/, ''); 
 
-  // Merge existing item with updates to ensure no data is lost
-  const updatedItem = { ...itemToUpdate, ...updates };
-  
-  // Recalculate status
-  const newStatus = getStatus(
-    updatedItem.currentStock, 
-    updatedItem.minimumStock, 
-    updatedItem.minimumStock * 1.2
-  );
-  
-  const dataToSend = { ...updatedItem, status: newStatus };
+    const itemToUpdate = inventory.find(i => i.id === id);
+    if (!itemToUpdate) return;
 
-  try {
-    const response = await fetch(`http://localhost:5000/api/inventory/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dataToSend),
-    });
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const updatedItem = { ...itemToUpdate, ...updates };
+    
+    const dataToSend = { 
+      product_name: updatedItem.name,
+      category: updatedItem.category,
+      current_stock: Number(updatedItem.currentStock), 
+      unit_cost: Number(updatedItem.unitCost), // Ensure this matches your interface
+      status: getStatus(updatedItem.currentStock, updatedItem.minimumStock),
+      user_id: savedUser.user_id || 0,
+      user_name: savedUser.user_name || "Owner",
+      role: savedUser.role
+    };
 
-    if (response.ok) {
-      // Update UI state
-      setInventory(prev => prev.map(item => 
-        item.id === id ? dataToSend : item
-      ));
-      console.log("Database and UI updated successfully");
-    } else {
-      console.error("Server rejected the update");
-    }
-  } catch (error) {
-    console.error("Network error during update:", error);
-  }
-};
-
-  // Update this function in your InventoryContext.tsx
-const deleteProduct = async (id: string) => {
     try {
-        // 1. Send the DELETE request to your Express server (Port 5000)
-        const response = await fetch(`http://localhost:5000/api/inventory/${id}`, {
-            method: 'DELETE',
-        });
+      // 2. USE numericId: Send the clean number to the API
+      const response = await fetch(`http://localhost:5000/api/inventory/${numericId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataToSend),
+      });
 
-        if (response.ok) {
-            // 2. Only if the DB delete works, update the frontend UI
-            setInventory(prev => prev.filter(item => item.id !== id));
-            console.log("Deleted from Database");
-        } else {
-            console.error("Failed to delete from Database");
-        }
+      if (response.ok) {
+        // 3. UPDATE LOCAL STATE: Use the original 'id' ("INV014") for React's state
+        setInventory(prev => prev.map(item => item.id === id ? updatedItem : item));
+        console.log("Update successful for Product ID:", numericId);
+      } else {
+        const errorText = await response.text();
+        console.error("Server update failed:", errorText);
+      }
     } catch (error) {
-        console.error("Error during deletion:", error);
+      console.error("Update error:", error);
     }
 };
+
+  const deleteProduct = async (id: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/inventory/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setInventory(prev => prev.filter(item => item.id !== id));
+        console.log("Deleted from Database");
+      } else {
+        console.error("Failed to delete from Database");
+      }
+    } catch (error) {
+      console.error("Error during deletion:", error);
+    }
+  };
 
   return (
     <InventoryContext.Provider value={{ inventory, setInventory, addProduct, updateProduct, deleteProduct }}>

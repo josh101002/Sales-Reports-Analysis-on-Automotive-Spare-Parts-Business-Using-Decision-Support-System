@@ -20,42 +20,6 @@ import { SuppliersView } from "./components/views/SuppliersView";
 import { SettingsView } from "./components/views/SettingsView";
 import { NotificationsView } from "./components/views/NotificationsView";
 
-// 1. Define the "Shape" of your data for TypeScript [cite: 80, 196]
-interface SalesRecord {
-  report_id: number;
-  date: string;
-  order_number: string;
-  category: string;
-  total_amount: number;
-}
-
-const Dashboard: React.FC = () => {
-  // 2. Create a "State" to hold your database data [cite: 1510]
-  const [salesData, setSalesData] = useState<SalesRecord[]>([]);
-
-  // 3. The "useEffect" Hook (Put it here!) [cite: 1297]
-  useEffect(() => {
-    fetch('http://localhost:5000/api/sales') // Your Express Server URL
-      .then((response) => response.json())
-      .then((data) => {
-        setSalesData(data); // This updates your UI with real data [cite: 263-265]
-      })
-      .catch((error) => console.error('Error fetching sales:', error));
-  }, []);
-
-  return (
-    <div>
-      {/* 4. Map through your data to show it in your UI [cite: 1299] */}
-      {salesData.map((item) => (
-        <div key={item.report_id}>
-          {item.order_number} - {item.total_amount}
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// export default app;
 export interface GlobalFilters {
   searchTerm: string;
   dateRange: string;
@@ -67,12 +31,15 @@ export interface GlobalFilters {
 }
 
 function AppContent() {
+  // 1. Authentication and User States
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<{ role: string; company_id: number; email: string; user_name?: string } | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true); 
+
   const [activeView, setActiveView] = useState("dashboard");
   const [showLowStockModal, setShowLowStockModal] = useState(false);
-  const { inventory } = useInventory();
+  const { inventory, setInventory } = useInventory(); 
 
-  // Global filters state
   const [globalFilters, setGlobalFilters] = useState<GlobalFilters>({
     searchTerm: "",
     dateRange: "october",
@@ -83,38 +50,67 @@ function AppContent() {
     priceRange: { min: 0, max: 1000 }
   });
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
+  // 2. FIXED: Check localStorage on Mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        setIsAuthenticated(false); // Must be true to enter the app
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+        localStorage.removeItem("user");
+      }
+    }
+    // Ensure checking state is disabled after the check
+    setIsCheckingAuth(false);
+  }, []);
+
+  // 3. UPDATED: Single handleLogin to trigger immediate transition
+const handleLogin = (userData: any) => {
+  setUser(userData);
+  setIsAuthenticated(true);
+  localStorage.setItem("user", JSON.stringify(userData));
+  
+  // Clear inventory state to prepare for fresh company data
+  if (setInventory) setInventory([]); 
+
+  // Dispatch event so InventoryContext knows to fetch for the NEW company_id
+  window.dispatchEvent(new Event("userLogin"));
+};
 
   const handleLogout = () => {
+    localStorage.removeItem("user");
+    // Clear inventory state so the next business doesn't see old data
+    if (setInventory) setInventory([]); 
     setIsAuthenticated(false);
+    setUser(null);
+    window.location.href = "/"; 
   };
 
-  // Check for low stock items when user logs in
-useEffect(() => {
-  if (isAuthenticated && inventory.length > 0) {
-    // Look for ANY item that is Critical or Low Stock
-    const lowStockItems = inventory.filter(item => 
-      item.status === "Critical" || item.status === "Low Stock"
-    );
-
-    if (lowStockItems.length > 0) {
-      console.log("Low stock detected!", lowStockItems);
-      setShowLowStockModal(true);
-    }
-  }
-}, [isAuthenticated, inventory]); // This triggers every time inventory changes
-
-  // Listen for filter updates from components
+  // 4. NEW: Monitor user changes for debugging/tracking
   useEffect(() => {
-    const handleFilterUpdate = (event: any) => {
-      updateFilters(event.detail);
-    };
+    if (isAuthenticated && user?.company_id) {
+        console.log("Active session for company:", user.company_id);
+    }
+  }, [user, isAuthenticated]);
 
-    const handleViewChange = (event: any) => {
-      setActiveView(event.detail);
-    };
+  useEffect(() => {
+    if (isAuthenticated && inventory.length > 0) {
+      const lowStockItems = inventory.filter(item => 
+        item.status === "Critical" || item.status === "Low Stock"
+      );
+
+      if (lowStockItems.length > 0) {
+        setShowLowStockModal(true);
+      }
+    }
+  }, [isAuthenticated, inventory]);
+
+  useEffect(() => {
+    const handleFilterUpdate = (event: any) => updateFilters(event.detail);
+    const handleViewChange = (event: any) => setActiveView(event.detail);
 
     window.addEventListener('updateFilters', handleFilterUpdate as EventListener);
     window.addEventListener('changeView', handleViewChange as EventListener);
@@ -124,24 +120,8 @@ useEffect(() => {
     };
   }, []);
 
-  const handleViewInventory = () => {
-    setActiveView("inventory");
-  };
-
   const updateFilters = (updates: Partial<GlobalFilters>) => {
     setGlobalFilters(prev => ({ ...prev, ...updates }));
-  };
-
-  const clearFilters = () => {
-    setGlobalFilters({
-      searchTerm: "",
-      dateRange: "october",
-      customDateRange: undefined,
-      analyticsView: "monthly",
-      categories: [],
-      status: [],
-      priceRange: { min: 0, max: 1000 }
-    });
   };
 
   const renderView = () => {
@@ -151,7 +131,7 @@ useEffect(() => {
       case "sales-reports":
         return <SalesReportsView globalFilters={globalFilters} />;
       case "predictions-trends":
-        return <PredictionsTrendsView globalFilters={globalFilters} />;
+        return <PredictionsTrendsView />; 
       case "analytics":
         return <AnalyticsView globalFilters={globalFilters} />;
       case "recommendations":
@@ -161,13 +141,26 @@ useEffect(() => {
       case "suppliers":
         return <SuppliersView />;
       case "settings":
-        return <SettingsView />;
+        // Role-based access control
+        if (user?.role === 'admin') {
+          return <SettingsView />;
+        }
+        return <DashboardView globalFilters={globalFilters} />;
       case "notifications":
         return <NotificationsView />;
       default:
         return <DashboardView globalFilters={globalFilters} />;
     }
   };
+
+  // LOADING GUARD: Prevents dashboard flicker
+  if (isCheckingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#212121]">
+        <div className="text-white text-xl animate-pulse">Checking Session...</div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginPage onLogin={handleLogin} />;
@@ -177,13 +170,18 @@ useEffect(() => {
     <>
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
-          <AppSidebar activeView={activeView} onViewChange={setActiveView} />
+          {/* UPDATED: Passing the 'user' object here to show business name */}
+          <AppSidebar 
+            activeView={activeView} 
+            onViewChange={setActiveView} 
+            user={user} 
+          />
           <SidebarInset className="flex-1">
             <SalesHeader
               onLogout={handleLogout}
               globalFilters={globalFilters}
               onUpdateFilters={updateFilters}
-              onClearFilters={clearFilters}
+              onClearFilters={() => {}}
               activeView={activeView}
             />
             <main className="flex-1 p-6 bg-background">
@@ -191,11 +189,10 @@ useEffect(() => {
             </main>
           </SidebarInset>
 
-          {/* Low Stock Alert Modal */}
           <LowStockModal
             isOpen={showLowStockModal}
             onClose={() => setShowLowStockModal(false)}
-            onViewInventory={handleViewInventory}
+            onViewInventory={() => setActiveView("inventory")}
           />
         </div>
       </SidebarProvider>

@@ -34,7 +34,6 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
     sku: "",
     currentStock: "",
     minimumStock: "",
-    reorderPoint: "",
     unitCost: "",
     supplier: "",
     location: ""
@@ -47,7 +46,6 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
       sku: "",
       currentStock: "",
       minimumStock: "",
-      reorderPoint: "",
       unitCost: "",
       supplier: "",
       location: ""
@@ -66,7 +64,6 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
       sku: productForm.sku,
       currentStock: parseInt(productForm.currentStock) || 0,
       minimumStock: parseInt(productForm.minimumStock) || 0,
-      reorderPoint: parseInt(productForm.reorderPoint) || 0,
       unitCost: parseFloat(productForm.unitCost) || 0,
       supplier: productForm.supplier,
       location: productForm.location
@@ -78,37 +75,42 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
   };
 
   const handleEditClick = (product: InventoryItem) => {
-    setSelectedProduct(product);
-    setProductForm({
-      name: product.name,
-      category: product.category,
-      sku: product.sku,
-      currentStock: product.currentStock.toString(),
-      minimumStock: product.minimumStock.toString(),
-      reorderPoint: product.reorderPoint.toString(),
-      unitCost: product.unitCost.toString(),
-      supplier: product.supplier,
-      location: product.location
-    });
-    setEditProductOpen(true);
-  };
+  setSelectedProduct(product);
+  setProductForm({
+    name: product.name,
+    category: product.category,
+    sku: product.sku,
+    currentStock: product.currentStock.toString(),
+    minimumStock: product.minimumStock.toString(),
+
+    unitCost: product.unitCost.toString(),
+    supplier: product.supplier,
+    location: product.location
+  });
+  setEditProductOpen(true);
+};
 
   const handleUpdateProduct = () => {
     if (!selectedProduct || !productForm.name || !productForm.category || !productForm.sku) {
       toast.error("Please fill in all required fields");
       return;
     }
-    
+
+    // Calculate the NEW status based on the NEW stock values
+    const current = parseInt(productForm.currentStock) || 0;
+    const min = parseInt(productForm.minimumStock) || 0;
+    const newStatus = current <= min ? "Critical" : "In Stock";
+
     updateProduct(selectedProduct.id, {
       name: productForm.name,
       category: productForm.category,
       sku: productForm.sku,
-      currentStock: parseInt(productForm.currentStock) || 0,
-      minimumStock: parseInt(productForm.minimumStock) || 0,
-      reorderPoint: parseInt(productForm.reorderPoint) || 0,
+      currentStock: current,
+      minimumStock: min,
       unitCost: parseFloat(productForm.unitCost) || 0,
       supplier: productForm.supplier,
-      location: productForm.location
+      location: productForm.location,
+      status: newStatus // <--- Pass the new status here!
     });
     
     toast.success(`Product "${productForm.name}" updated successfully!`);
@@ -487,7 +489,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                     <TableCell>{item.category}</TableCell>
                     <TableCell>
                       <span className={`font-medium ${
-                        item.currentStock <= item.reorderPoint ? 'text-red-600' : 'text-green-600'
+                        item.currentStock <= item.minimumStock ? 'text-red-600' : 'text-green-600'
                       }`}>
                         {item.currentStock} units
                       </span>
@@ -596,7 +598,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell className="text-orange-600 font-medium">{item.currentStock} units</TableCell>
                     <TableCell>{item.minimumStock} units</TableCell>
-                    <TableCell>{item.reorderPoint} units</TableCell>
+                    {/* <TableCell>{item.reorderPoint} units</TableCell> */}
                     <TableCell>{item.supplier}</TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline">Reorder</Button>
@@ -704,8 +706,8 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
               Enter the details for the new inventory item
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-3 py-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Product Name *</Label>
                 <Input
@@ -715,7 +717,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                   placeholder="e.g., Ceramic Brake Pads"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="category">Category *</Label>
                 <Select value={productForm.category} onValueChange={(value: string) => setProductForm({...productForm, category: value})}>
                   <SelectTrigger>
@@ -752,7 +754,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="currentStock">Current Stock</Label>
                 <Input
@@ -773,7 +775,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                   placeholder="0"
                 />
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="reorderPoint">Reorder Point</Label>
                 <Input
                   id="reorderPoint"
@@ -782,7 +784,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                   onChange={(e) => setProductForm({...productForm, reorderPoint: e.target.value})}
                   placeholder="0"
                 />
-              </div>
+              </div> */}
               <div className="space-y-2">
                 <Label htmlFor="unitCost">Unit Cost ($)</Label>
                 <Input
@@ -826,7 +828,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-name">Product Name *</Label>
                 <Input
@@ -894,7 +896,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                   placeholder="0"
                 />
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="edit-reorderPoint">Reorder Point</Label>
                 <Input
                   id="edit-reorderPoint"
@@ -903,7 +905,7 @@ export function InventoryView({ globalFilters }: InventoryViewProps) {
                   onChange={(e) => setProductForm({...productForm, reorderPoint: e.target.value})}
                   placeholder="0"
                 />
-              </div>
+              </div> */}
               <div className="space-y-2">
                 <Label htmlFor="edit-unitCost">Unit Cost ($)</Label>
                 <Input
