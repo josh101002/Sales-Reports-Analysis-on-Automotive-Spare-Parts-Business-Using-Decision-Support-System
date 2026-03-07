@@ -1,10 +1,11 @@
 {
   "name": "autoparts-backend",
   "version": "1.0.0",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon --exec ts-node server.ts"
+    "dev": "nodemon --exec \"node --loader ts-node/esm\" server.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,10 +18,13 @@
     "mysql2": "^3.18.2"
   },
   "devDependencies": {
+    "@prisma/client": "^6.19.0",
+    "@prisma/config": "^7.4.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.3.2",
+    "@types/node": "^25.3.5",
     "nodemon": "^3.1.14",
+    "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

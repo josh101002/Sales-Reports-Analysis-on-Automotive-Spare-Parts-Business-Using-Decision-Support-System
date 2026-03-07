@@ -1,12 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES6",
-    "module": "commonjs",
-    "outDir": "./dist",
-    "rootDir": "./",
-    "strict": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "strict": true, // Recommended best practice for thesis projects
+    "outDir": "./dist"
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifiers": true
   }
 }

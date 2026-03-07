@@ -28,8 +28,9 @@ const getStatus = (current: number, min: number): string => {
   const currentStock = Number(current);
   const minStock = Number(min);
 
+  // Match the exact enum names in your schema.prisma
   if (currentStock <= minStock) return "Critical"; 
-  return "In Stock";
+  return "In_Stock"; // Change "In Stock" to "In_Stock"
 };
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
@@ -132,11 +133,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       product_name: updatedItem.name,
       category: updatedItem.category,
       current_stock: Number(updatedItem.currentStock), 
-      unit_cost: Number(updatedItem.unitCost), // Ensure this matches your interface
+      unit_cost: Number(updatedItem.unitCost),
       status: getStatus(updatedItem.currentStock, updatedItem.minimumStock),
       user_id: savedUser.user_id || 0,
       user_name: savedUser.user_name || "Owner",
-      role: savedUser.role
+      role: savedUser.role,
+      company_id: savedUser.company_id,
+      // ADD THESE:
+      min_stock: Number(updatedItem.minimumStock),
+      sku: updatedItem.sku,
+      supplier: updatedItem.supplier,
+      location: updatedItem.location
     };
 
     try {
@@ -148,29 +155,44 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
-        // 3. UPDATE LOCAL STATE: Use the original 'id' ("INV014") for React's state
-        setInventory(prev => prev.map(item => item.id === id ? updatedItem : item));
-        console.log("Update successful for Product ID:", numericId);
-      } else {
-        const errorText = await response.text();
-        console.error("Server update failed:", errorText);
-      }
+        const result = await response.json();
+        const dbItem = result.updatedProduct;
+
+        // Map the database names back to your React Interface names
+        const syncedItem: InventoryItem = {
+            id: id, // Keep the "INV00X" ID
+            name: dbItem.product_name,
+            category: dbItem.category,
+            sku: dbItem.sku || "",
+            currentStock: Number(dbItem.current_stock),
+            minimumStock: Number(dbItem.min_stock),
+            unitCost: Number(dbItem.unit_cost),
+            supplier: dbItem.supplier || "",
+            status: dbItem.status,
+            location: dbItem.location || ""
+        };
+
+        // Force React to re-render by creating a new array with the synced item
+        setInventory(prev => prev.map(item => item.id === id ? syncedItem : item));
+        
+        console.log("UI updated and synced with DB for:", id);
+    }
     } catch (error) {
       console.error("Update error:", error);
     }
 };
 
   const deleteProduct = async (id: string) => {
+    // Fix: Convert "INV001" to "1" so the DB knows which row to delete
+    const numericId = id.replace('INV', '').replace(/^0+/, ''); 
+
     try {
-      const response = await fetch(`http://localhost:5000/api/inventory/${id}`, {
+      const response = await fetch(`http://localhost:5000/api/inventory/${numericId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         setInventory(prev => prev.filter(item => item.id !== id));
-        console.log("Deleted from Database");
-      } else {
-        console.error("Failed to delete from Database");
       }
     } catch (error) {
       console.error("Error during deletion:", error);
