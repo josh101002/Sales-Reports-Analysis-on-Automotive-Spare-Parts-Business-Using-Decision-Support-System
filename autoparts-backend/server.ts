@@ -8,7 +8,8 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // --- AUTH ROUTES ---
 
@@ -169,5 +170,130 @@ app.listen(process.env.PORT, async () => {
         console.log("Successfully connected to MySQL Database via Prisma.");
     } catch (error) {
         console.error("Database connection failed:", error);
+    }
+});
+
+// Create Staff Member
+app.post('/api/team', async (req, res) => {
+    const { fullName, email, password, company_id } = req.body;
+    try {
+        const newUser = await prisma.users.create({
+            data: {
+                full_name: fullName,
+                email: email,
+                password_hash: password, // In production, hash this!
+                company_id: Number(company_id),
+                role: 'Business' // This maps to your Enum in schema.prisma
+            }
+        });
+        res.status(200).json(newUser);
+    } catch (err: any) {
+        res.status(500).json({ message: "Failed to create staff: " + err.message });
+    }
+});
+
+// Fetch Team Members
+app.get('/api/team', async (req, res) => {
+    const company_id = parseInt(req.query.company_id as string);
+    try {
+        const team = await prisma.users.findMany({
+            where: { company_id }
+        });
+        res.status(200).json(team);
+    } catch (err) {
+        res.status(500).send(err);
+    }
+});
+
+// GET: Fetch sales for a company
+app.get('/api/sales', async (req, res) => {
+    const company_id = parseInt(req.query.company_id as string);
+    try {
+        const sales = await prisma.sales_reports.findMany({
+            where: { company_id: company_id },
+            orderBy: { date: 'desc' } // Changed from report_date to date
+        });
+        res.json(sales);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST: Bulk Add/Import Sales
+app.post('/api/sales', async (req, res) => {
+    try {
+        const { reports } = req.body;
+        const result = await prisma.sales_reports.createMany({
+            data: reports.map((r: any) => ({
+                company_id: Number(r.company_id),
+                date: new Date(r.date), 
+                order_number: r.order_number,
+                product_name: r.product_name,
+                category: r.category,
+                customer_type: r.customer_type || "Walk-in", 
+                quantity: Number(r.quantity),
+                unit_price: Number(r.unit_price),
+                total_amount: Number(r.total_amount),
+                payment_method: r.payment_method || "Cash",
+                status: r.status || "Completed" // <--- ADD THIS LINE
+            }))
+        });
+        res.status(200).json({ count: result.count });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE a sale
+app.put('/api/sales/:id', async (req, res) => {
+    const id = parseInt(req.params.id);
+    
+    const { 
+        reportDate, 
+        orderNumber,
+        productName, 
+        category, 
+        quantity, 
+        unitPrice, 
+        totalAmount, 
+        customerName,
+        paymentMethod,
+        status // <--- Destructure status from req.body
+    } = req.body;
+
+    try {
+        await prisma.sales_reports.update({
+            where: { report_id: id },
+            data: {
+                date: reportDate ? new Date(reportDate) : undefined,
+                order_number: orderNumber,
+                product_name: productName,
+                category: category,
+                quantity: Number(quantity),
+                unit_price: Number(unitPrice),
+                total_amount: Number(totalAmount),
+                customer_type: customerName,
+                payment_method: paymentMethod,
+                status: status
+            }
+        });
+
+        res.json({ message: "Updated successfully" });
+    } catch (err: any) {
+        console.error("Prisma Update Error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE a sale
+app.delete('/api/sales/:id', async (req, res) => {
+    const id = parseInt(req.params.id);
+    try {
+        await prisma.sales_reports.delete({
+            where: { report_id: id }
+        });
+        res.json({ message: "Deleted" });
+    } catch (err) {
+        res.status(500).json({ error: "Delete failed" });
     }
 });

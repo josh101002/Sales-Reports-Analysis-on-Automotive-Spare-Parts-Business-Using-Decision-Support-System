@@ -36,14 +36,16 @@ function AppContent() {
   const [user, setUser] = useState<{ role: string; company_id: number; email: string; user_name?: string } | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); 
 
-  const [activeView, setActiveView] = useState("dashboard");
+  const [activeView, setActiveView] = useState(() => {
+  const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    return (savedUser.role === 'staff' || savedUser.role === 'Business') ? "inventory" : "dashboard";
+  });
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const { inventory, setInventory } = useInventory(); 
 
   const [globalFilters, setGlobalFilters] = useState<GlobalFilters>({
     searchTerm: "",
-    dateRange: "october",
-    customDateRange: undefined,
+    dateRange: "all", // Change this from "october" to "all"
     analyticsView: "monthly",
     categories: [],
     status: [],
@@ -68,17 +70,17 @@ function AppContent() {
   }, []);
 
   // 3. UPDATED: Single handleLogin to trigger immediate transition
-const handleLogin = (userData: any) => {
-  setUser(userData);
-  setIsAuthenticated(true);
-  localStorage.setItem("user", JSON.stringify(userData));
-  
-  // Clear inventory state to prepare for fresh company data
-  if (setInventory) setInventory([]); 
-
-  // Dispatch event so InventoryContext knows to fetch for the NEW company_id
-  window.dispatchEvent(new Event("userLogin"));
-};
+  const handleLogin = (userData: any) => {
+    // 1. Save to local storage so Context can find it
+    localStorage.setItem("user", JSON.stringify(userData)); 
+    
+    // 2. Dispatch the event
+    window.dispatchEvent(new Event("userLogin")); 
+    
+    // 3. Update App state
+    setUser(userData);
+    setIsAuthenticated(true);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -125,9 +127,10 @@ const handleLogin = (userData: any) => {
   };
 
   const renderView = () => {
+    const isStaff = user?.role === 'staff' || user?.role === 'Business';
     switch (activeView) {
       case "dashboard":
-        return <DashboardView globalFilters={globalFilters} />;
+        return isStaff ? <InventoryView globalFilters={globalFilters} /> : <DashboardView globalFilters={globalFilters} />;
       case "sales-reports":
         return <SalesReportsView globalFilters={globalFilters} />;
       case "predictions-trends":

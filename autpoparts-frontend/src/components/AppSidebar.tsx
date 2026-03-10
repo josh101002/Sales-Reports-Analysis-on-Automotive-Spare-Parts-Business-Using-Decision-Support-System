@@ -8,7 +8,6 @@ import {
   Home,
   ChevronRight,
   LineChart,
-  Target,
 } from "lucide-react";
 
 import {
@@ -20,94 +19,64 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarHeader,
 } from "./ui/sidebar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Badge } from "./ui/badge"; // Ensure you have a Badge component
 import { ForwardRefExoticComponent, RefAttributes } from "react";
 import { LucideProps } from "lucide-react";
 
 interface AppSidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
-  user: { user_name?: string } | null; // Added user prop
+  // Updated user type to include the role from your database
+  user: { user_name?: string; role?: string } | null; 
 }
 
-export function AppSidebar({ activeView, onViewChange, user}: AppSidebarProps) {
+export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) {
+  // Check if the role is 'staff' or 'Business' (Staff role in your DB)
+  const isStaff = user?.role === 'staff' || user?.role === 'Business';
+
   interface MenuItem {
     title: string;
     icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
     key: string;
-    subItems?: { title: string; key: string }[];
   }
 
-  const menuItems: {
-    title: string;
-    items: MenuItem[];
-  }[] = [
+  // Define the menu structure with conditional filtering
+  const menuItems = [
     {
       title: "Overview",
-      items: [
-        {
-          title: "Dashboard",
-          icon: Home,
-          key: "dashboard",
-        },
+      // Staff cannot see the main Dashboard
+      items: isStaff ? [] : [
+        { title: "Dashboard", icon: Home, key: "dashboard" },
       ],
     },
     {
       title: "Sales & Analytics",
-      items: [
-        {
-          title: "Sales Reports",
-          icon: BarChart3,
-          key: "sales-reports",
-        },
-        {
-          title: "Predictions & Trends",
-          icon: LineChart,
-          key: "predictions-trends",
-        },
-        {
-          title: "Analytics",
-          icon: TrendingUp,
-          key: "analytics",
-        },
-        {
-          title: "Recommendations",
-          icon: Brain,
-          key: "recommendations",
-        },
+      // Staff cannot see financial or predictive data
+      items: isStaff ? [] : [
+        { title: "Sales Reports", icon: BarChart3, key: "sales-reports" },
+        { title: "Predictions & Trends", icon: LineChart, key: "predictions-trends" },
+        { title: "Analytics", icon: TrendingUp, key: "analytics" },
+        { title: "Recommendations", icon: Brain, key: "recommendations" },
       ],
     },
     {
       title: "Inventory Management",
+      // BOTH Roles can access these
       items: [
-        {
-          title: "Inventory",
-          icon: Package,
-          key: "inventory",
-        },
-        {
-          title: "Suppliers",
-          icon: Truck,
-          key: "suppliers",
-        },
+        { title: "Inventory", icon: Package, key: "inventory" },
+        { title: "Suppliers", icon: Truck, key: "suppliers" },
       ],
     },
     {
       title: "Configuration",
-      items: [
-        {
-          title: "Settings",
-          icon: Settings,
-          key: "settings",
-        },
+      // Staff cannot access Settings
+      items: isStaff ? [] : [
+        { title: "Settings", icon: Settings, key: "settings" },
       ],
     },
-  ];
+  ].filter(group => group.items.length > 0); // Remove empty groups for Staff
 
   return (
     <Sidebar>
@@ -117,11 +86,21 @@ export function AppSidebar({ activeView, onViewChange, user}: AppSidebarProps) {
             <BarChart3 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-sidebar-foreground">AutoParts Pro</h3>
-            <p className="text-xs text-[#B0BEC5]">Sales Analytics</p>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sidebar-foreground">AutoParts Pro</h3>
+              {isStaff && (
+                <Badge variant="outline" className="text-[10px] uppercase border-orange-500 text-orange-500 px-1 py-0">
+                  Staff
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-[#B0BEC5] truncate max-w-[120px]">
+              {user?.user_name || "Business Owner"}
+            </p>
           </div>
         </div>
       </SidebarHeader>
+      
       <SidebarContent>
         {menuItems.map((group) => (
           <SidebarGroup key={group.title}>
@@ -130,49 +109,14 @@ export function AppSidebar({ activeView, onViewChange, user}: AppSidebarProps) {
               <SidebarMenu>
                 {group.items.map((item) => (
                   <SidebarMenuItem key={item.key}>
-                    {item.subItems ? (
-                      <Collapsible>
-                        <CollapsibleTrigger asChild>
-                          <SidebarMenuButton
-                            className={activeView === item.key ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}
-                          >
-                            <item.icon className="w-4 h-4" />
-                            <span>{item.title}</span>
-                            <ChevronRight className="w-4 h-4 ml-auto transition-transform group-data-[state=open]:rotate-90" />
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarMenuSub>
-                            <SidebarMenuSubItem>
-                              <SidebarMenuSubButton
-                                onClick={() => onViewChange(item.key)}
-                                className={activeView === item.key ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}
-                              >
-                                <span>Overview</span>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                            {item.subItems.map((subItem) => (
-                              <SidebarMenuSubItem key={subItem.key}>
-                                <SidebarMenuSubButton
-                                  onClick={() => onViewChange(subItem.key)}
-                                  className={activeView === subItem.key ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}
-                                >
-                                  <span>{subItem.title}</span>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    ) : (
-                      <SidebarMenuButton
-                        onClick={() => onViewChange(item.key)}
-                        className={activeView === item.key ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    )}
+                    <SidebarMenuButton
+                      onClick={() => onViewChange(item.key)}
+                      className={activeView === item.key ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      <span>{item.title}</span>
+                      {activeView === item.key && <ChevronRight className="w-4 h-4 ml-auto" />}
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

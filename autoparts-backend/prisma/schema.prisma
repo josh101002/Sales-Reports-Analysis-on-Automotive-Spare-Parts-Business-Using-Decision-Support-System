@@ -105,6 +105,7 @@ model sales_reports {
   unit_price     Decimal   @db.Decimal(10, 2)
   total_amount   Decimal   @db.Decimal(10, 2)
   payment_method String?   @db.VarChar(20)
+  status        String   @default("Completed")
   companies      companies @relation(fields: [company_id], references: [company_id], onDelete: NoAction, onUpdate: NoAction, map: "sales_reports_ibfk_1")
 
   @@index([company_id], map: "company_id")

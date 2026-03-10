@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Badge } from "../ui/badge";
@@ -53,40 +53,57 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
-const salesTrendData = [
-  { month: "Jan", sales: 42000, orders: 520 },
-  { month: "Feb", sales: 45000, orders: 550 },
-  { month: "Mar", sales: 48000, orders: 580 },
-  { month: "Apr", sales: 52000, orders: 610 },
-  { month: "May", sales: 49000, orders: 595 },
-  { month: "Jun", sales: 55000, orders: 640 },
-  { month: "Jul", sales: 61000, orders: 690 },
-  { month: "Aug", sales: 58000, orders: 665 },
-  { month: "Sep", sales: 64000, orders: 720 },
-  { month: "Oct", sales: 68500, orders: 755 },
-];
-
-const topProductsData = [
-  { name: "Brake Pads", sales: 425, revenue: 42500 },
-  { name: "Oil Filters", sales: 380, revenue: 19000 },
-  { name: "Spark Plugs", sales: 320, revenue: 16000 },
-  { name: "Air Filters", sales: 280, revenue: 14000 },
-  { name: "Brake Rotors", sales: 185, revenue: 37000 },
-];
-
-const categoryData = [
-  { name: "Engine Parts", value: 35, color: "#FF6B00" },
-  { name: "Brake System", value: 28, color: "#607D8B" },
-  { name: "Filters", value: 22, color: "#212121" },
-  { name: "Electrical", value: 15, color: "#B0BEC5" },
-];
-
 interface SalesReportsViewProps {
   globalFilters?: GlobalFilters;
 }
 
 export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
   const { salesReports, addSalesReport, updateSalesReport, deleteSalesReport, importFromCSV } = useSalesReports();
+
+  // Dynamic Chart Calculations
+  const salesTrendData = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return months.map((month, i) => {
+      const monthlyReports = salesReports.filter(r => new Date(r.reportDate).getMonth() === i);
+      return {
+        month,
+        sales: monthlyReports.reduce((sum, r) => sum + r.totalAmount, 0),
+        orders: monthlyReports.length
+      };
+    }).filter(data => data.orders > 0); // Only show months that have data
+  }, [salesReports]);
+
+  const topProductsData = useMemo(() => {
+    const productMap = new Map();
+    salesReports.forEach(r => {
+      const current = productMap.get(r.productName) || { name: r.productName, sales: 0, revenue: 0 };
+      productMap.set(r.productName, {
+        name: r.productName,
+        sales: current.sales + r.quantity,
+        revenue: current.revenue + r.totalAmount
+      });
+    });
+    return Array.from(productMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5); // Top 5 only
+  }, [salesReports]);
+
+  const categoryData = useMemo(() => {
+    const categoryMap = new Map();
+    const colors = ["#FF6B00", "#607D8B", "#212121", "#B0BEC5", "#FFA726", "#424242"];
+    const totalRev = salesReports.reduce((sum, r) => sum + r.totalAmount, 0);
+    
+    salesReports.forEach(r => {
+      const currentRev = categoryMap.get(r.category) || 0;
+      categoryMap.set(r.category, currentRev + r.totalAmount);
+    });
+
+    return Array.from(categoryMap.entries()).map(([name, revenue], index) => ({
+      name,
+      value: totalRev > 0 ? Number(((revenue / totalRev) * 100).toFixed(0)) : 0,
+      color: colors[index % colors.length]
+    }));
+  }, [salesReports]);
   
   const [modalOpen, setModalOpen] = useState<string | null>(null);
   const [addEditModalOpen, setAddEditModalOpen] = useState(false);
@@ -122,7 +139,33 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
   const totalOrders = salesReports.length;
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
   const completedOrders = salesReports.filter(r => r.status === "Completed").length;
-  const growthRate = 15.7; // Mock growth rate
+  
+  // DYNAMIC GROWTH RATE CALCULATION 
+  const growthRate = useMemo(() => {
+    if (salesReports.length === 0) return 0;
+
+    // 1. Group revenue by Year-Month
+    const monthlyRevenue: { [key: string]: number } = {};
+    salesReports.forEach(report => {
+      const date = new Date(report.reportDate);
+      const key = `${date.getFullYear()}-${date.getMonth()}`; // e.g., "2021-5" for June
+      monthlyRevenue[key] = (monthlyRevenue[key] || 0) + report.totalAmount;
+    });
+
+    // 2. Sort the months to find the most recent ones
+    const sortedMonths = Object.keys(monthlyRevenue).sort().reverse();
+    
+    if (sortedMonths.length < 2) return 0; // Need at least 2 months to compare
+
+    const latestMonthRev = monthlyRevenue[sortedMonths[0]];   // e.g., August 2021
+    const previousMonthRev = monthlyRevenue[sortedMonths[1]]; // e.g., July 2021
+
+    // 3. Calculate Percentage Growth: ((New - Old) / Old) * 100
+    if (previousMonthRev === 0) return 0;
+    const percentage = ((latestMonthRev - previousMonthRev) / previousMonthRev) * 100;
+    
+    return parseFloat(percentage.toFixed(1));
+  }, [salesReports]);
 
   // Filter reports based on search and global filters
   const filteredReports = salesReports.filter(report => {
@@ -527,8 +570,6 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
     }
   };
 
-  // Remove this line; AnimationGeneratorType is not needed with framer-motion
-
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
@@ -668,10 +709,15 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl mb-1">+{growthRate}%</div>
-              <div className="flex items-center text-sm text-green-600">
-                <ArrowUpRight className="w-4 h-4 mr-1" />
-                <span>Above target</span>
+              <div className={`text-3xl mb-1 ${growthRate >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {growthRate > 0 ? '+' : ''}{growthRate}%
+              </div>
+              <div className="flex items-center text-sm">
+                {growthRate >= 0 ? (
+                  <span className="text-green-600 flex items-center"><ArrowUpRight className="w-4 h-4 mr-1" /> Trending Up</span>
+                ) : (
+                  <span className="text-red-600 flex items-center"><TrendingDown className="w-4 h-4 mr-1" /> Trending Down</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -885,7 +931,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                         borderRadius: '8px', 
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
                       }}
-                      formatter={(value) => [`$${value.toLocaleString()}`, 'Sales']} 
+                      formatter={(value: any) => [`$${value.toLocaleString()}`, 'Sales']} 
                     />
                     <Area 
                       type="monotone" 
@@ -919,7 +965,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                         borderRadius: '8px', 
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
                       }}
-                      formatter={(value) => [value.toLocaleString(), 'Orders']} 
+                      formatter={(value: any) => [value.toLocaleString(), 'Orders']} 
                     />
                     <Bar dataKey="orders" fill="#607D8B" radius={[8, 8, 0, 0]} />
                   </BarChart>
@@ -948,7 +994,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                       borderRadius: '8px', 
                       boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
                     }}
-                    formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']} 
+                    formatter={(value: any) => [`$${value.toLocaleString()}`, 'Revenue']} 
                   />
                   <Bar dataKey="revenue" fill="#FF6B00" radius={[0, 8, 8, 0]} />
                 </BarChart>
@@ -1335,7 +1381,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                     const methodRevenue = salesReports
                       .filter(r => r.paymentMethod === method)
                       .reduce((sum, r) => sum + r.totalAmount, 0);
-                    const percentage = (methodRevenue / totalRevenue) * 100;
+                    const percentage = totalRevenue > 0 ? (methodRevenue / totalRevenue) * 100 : 0;
                     
                     return (
                       <div key={method} className="space-y-1">
@@ -1451,7 +1497,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ${Math.max(...salesReports.map(r => r.totalAmount)).toFixed(2)}
+                    ${salesReports.length > 0 ? Math.max(...salesReports.map(r => r.totalAmount)).toFixed(2) : "0.00"}
                   </div>
                 </CardContent>
               </Card>
@@ -1461,7 +1507,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ${Math.min(...salesReports.map(r => r.totalAmount)).toFixed(2)}
+                    ${salesReports.length > 0 ? Math.min(...salesReports.map(r => r.totalAmount)).toFixed(2) : "0.00"}
                   </div>
                 </CardContent>
               </Card>

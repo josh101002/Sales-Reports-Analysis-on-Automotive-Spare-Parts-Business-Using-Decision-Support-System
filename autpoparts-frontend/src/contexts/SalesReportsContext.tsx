@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+// salesreportcontext.tsx - FIXED MAPPING
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { toast } from "sonner";
 
 export interface SalesReport {
@@ -14,290 +15,200 @@ export interface SalesReport {
   status: "Completed" | "Pending" | "Cancelled";
   orderNumber: string;
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface SalesReportsContextType {
   salesReports: SalesReport[];
-  addSalesReport: (report: Omit<SalesReport, "id" | "createdAt" | "updatedAt">) => void;
-  updateSalesReport: (id: string, report: Partial<SalesReport>) => void;
-  deleteSalesReport: (id: string) => void;
-  importFromCSV: (csvData: string) => void;
-  getSalesReportById: (id: string) => SalesReport | undefined;
+  addSalesReport: (report: any) => Promise<void>;
+  updateSalesReport: (id: string, report: any) => Promise<void>;
+  deleteSalesReport: (id: string) => Promise<void>;
+  importFromCSV: (csvData: string) => Promise<void>;
+  fetchSales: () => Promise<void>;
 }
 
 const SalesReportsContext = createContext<SalesReportsContextType | undefined>(undefined);
 
-// Initial mock sales reports data
-const initialSalesReports: SalesReport[] = [
-  {
-    id: "SR-001",
-    reportDate: "2025-10-20",
-    productName: "Ceramic Brake Pads",
-    category: "Brake System",
-    quantity: 2,
-    unitPrice: 100,
-    totalAmount: 200,
-    customerName: "ABC Motors",
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    orderNumber: "ORD-1847",
-    notes: "Premium brake pads for sedan",
-    createdAt: "2025-10-20T08:30:00Z",
-    updatedAt: "2025-10-20T08:30:00Z"
-  },
-  {
-    id: "SR-002",
-    reportDate: "2025-10-20",
-    productName: "Premium Oil Filter",
-    category: "Filters",
-    quantity: 5,
-    unitPrice: 50,
-    totalAmount: 250,
-    customerName: "AutoZone Services",
-    paymentMethod: "Bank Transfer",
-    status: "Pending",
-    orderNumber: "ORD-1846",
-    notes: "Bulk order for service center",
-    createdAt: "2025-10-20T09:15:00Z",
-    updatedAt: "2025-10-20T09:15:00Z"
-  },
-  {
-    id: "SR-003",
-    reportDate: "2025-10-19",
-    productName: "Platinum Spark Plugs",
-    category: "Engine Parts",
-    quantity: 8,
-    unitPrice: 50,
-    totalAmount: 400,
-    customerName: "Quick Fix Auto",
-    paymentMethod: "Cash",
-    status: "Completed",
-    orderNumber: "ORD-1845",
-    notes: "High performance spark plugs",
-    createdAt: "2025-10-19T14:20:00Z",
-    updatedAt: "2025-10-19T14:20:00Z"
-  },
-  {
-    id: "SR-004",
-    reportDate: "2025-10-19",
-    productName: "Air Filter",
-    category: "Filters",
-    quantity: 3,
-    unitPrice: 35,
-    totalAmount: 105,
-    customerName: "Elite Motors",
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    orderNumber: "ORD-1844",
-    notes: "Standard air filters",
-    createdAt: "2025-10-19T11:45:00Z",
-    updatedAt: "2025-10-19T11:45:00Z"
-  },
-  {
-    id: "SR-005",
-    reportDate: "2025-10-18",
-    productName: "Brake Rotors",
-    category: "Brake System",
-    quantity: 4,
-    unitPrice: 200,
-    totalAmount: 800,
-    customerName: "Pro Auto Parts",
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    orderNumber: "ORD-1843",
-    notes: "Heavy duty brake rotors",
-    createdAt: "2025-10-18T10:30:00Z",
-    updatedAt: "2025-10-18T10:30:00Z"
-  },
-  {
-    id: "SR-006",
-    reportDate: "2025-10-18",
-    productName: "Engine Oil 5W-30",
-    category: "Engine Parts",
-    quantity: 12,
-    unitPrice: 45,
-    totalAmount: 540,
-    customerName: "ABC Motors",
-    paymentMethod: "Bank Transfer",
-    status: "Completed",
-    orderNumber: "ORD-1842",
-    notes: "Synthetic engine oil",
-    createdAt: "2025-10-18T15:00:00Z",
-    updatedAt: "2025-10-18T15:00:00Z"
-  },
-  {
-    id: "SR-007",
-    reportDate: "2025-10-17",
-    productName: "Battery 12V",
-    category: "Electrical",
-    quantity: 1,
-    unitPrice: 150,
-    totalAmount: 150,
-    customerName: "Quick Fix Auto",
-    paymentMethod: "Cash",
-    status: "Completed",
-    orderNumber: "ORD-1841",
-    notes: "Car battery replacement",
-    createdAt: "2025-10-17T13:20:00Z",
-    updatedAt: "2025-10-17T13:20:00Z"
-  },
-  {
-    id: "SR-008",
-    reportDate: "2025-10-17",
-    productName: "Windshield Wipers",
-    category: "Accessories",
-    quantity: 6,
-    unitPrice: 30,
-    totalAmount: 180,
-    customerName: "AutoZone Services",
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    orderNumber: "ORD-1840",
-    notes: "Premium wiper blades",
-    createdAt: "2025-10-17T09:10:00Z",
-    updatedAt: "2025-10-17T09:10:00Z"
-  },
-  {
-    id: "SR-009",
-    reportDate: "2025-10-16",
-    productName: "Headlight Bulbs H7",
-    category: "Lighting",
-    quantity: 10,
-    unitPrice: 25,
-    totalAmount: 250,
-    customerName: "Elite Motors",
-    paymentMethod: "Bank Transfer",
-    status: "Completed",
-    orderNumber: "ORD-1839",
-    notes: "LED headlight bulbs",
-    createdAt: "2025-10-16T16:30:00Z",
-    updatedAt: "2025-10-16T16:30:00Z"
-  },
-  {
-    id: "SR-010",
-    reportDate: "2025-10-16",
-    productName: "Transmission Fluid",
-    category: "Engine Parts",
-    quantity: 7,
-    unitPrice: 55,
-    totalAmount: 385,
-    customerName: "Pro Auto Parts",
-    paymentMethod: "Credit Card",
-    status: "Completed",
-    orderNumber: "ORD-1838",
-    notes: "ATF transmission fluid",
-    createdAt: "2025-10-16T12:00:00Z",
-    updatedAt: "2025-10-16T12:00:00Z"
-  }
-];
-
 export function SalesReportsProvider({ children }: { children: ReactNode }) {
-  const [salesReports, setSalesReports] = useState<SalesReport[]>(initialSalesReports);
+  const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
 
-  const addSalesReport = (report: Omit<SalesReport, "id" | "createdAt" | "updatedAt">) => {
-    const newReport: SalesReport = {
-      ...report,
-      id: `SR-${String(salesReports.length + 1).padStart(3, "0")}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    setSalesReports(prev => [newReport, ...prev]);
-    toast.success("Sales report added successfully!");
-  };
+  const fetchSales = useCallback(async () => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const companyId = savedUser.company_id;
 
-  const updateSalesReport = (id: string, updates: Partial<SalesReport>) => {
-    setSalesReports(prev =>
-      prev.map(report =>
-        report.id === id
-          ? { ...report, ...updates, updatedAt: new Date().toISOString() }
-          : report
-      )
-    );
-    toast.success("Sales report updated successfully!");
-  };
+    if (!companyId) {
+      setSalesReports([]);
+      return;
+    }
 
-  const deleteSalesReport = (id: string) => {
-    setSalesReports(prev => prev.filter(report => report.id !== id));
-    toast.success("Sales report deleted successfully!");
-  };
-
-  const importFromCSV = (csvData: string) => {
     try {
-      const lines = csvData.trim().split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
+      const response = await fetch(`http://localhost:5000/api/sales?company_id=${companyId}`);
+      if (!response.ok) throw new Error("Failed to fetch");
       
-      const newReports: SalesReport[] = [];
+      const data = await response.json();
       
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
-        
-        if (values.length === headers.length) {
-          const report: any = {};
-          headers.forEach((header, index) => {
-            report[header] = values[index];
-          });
-          
-          // Map CSV data to SalesReport format
-          const salesReport: SalesReport = {
-            id: `SR-${String(salesReports.length + i).padStart(3, "0")}`,
-            reportDate: report.reportDate || report.date || new Date().toISOString().split('T')[0],
-            productName: report.productName || report.product || "Unknown Product",
-            category: report.category || "Uncategorized",
-            quantity: parseInt(report.quantity || "1"),
-            unitPrice: parseFloat(report.unitPrice || report.price || "0"),
-            totalAmount: parseFloat(report.totalAmount || report.total || "0"),
-            customerName: report.customerName || report.customer || "Unknown Customer",
-            paymentMethod: report.paymentMethod || report.payment || "Cash",
-            status: (report.status as any) || "Completed",
-            orderNumber: report.orderNumber || report.order || `ORD-${Date.now()}`,
-            notes: report.notes || "",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          
-          newReports.push(salesReport);
-        }
+      const mapped = data.map((s: any) => ({
+        id: `SR-${String(s.report_id || s.id).padStart(3, "0")}`,
+        reportDate: s.date ? new Date(s.date).toISOString().split('T')[0] : "2026-01-01",
+        productName: s.product_name || "Unknown",
+        category: s.category || "General",
+        quantity: Number(s.quantity) || 0,
+        unitPrice: Number(s.unit_price) || 0,
+        totalAmount: Number(s.total_amount) || 0,
+        customerName: s.customer_type || "Walk-in",
+        paymentMethod: s.payment_method || "Cash",
+        orderNumber: s.order_number || "N/A",
+        status: s.status || "Completed"
+      }));
+      
+      setSalesReports(mapped);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSales();
+    const handleLogin = () => fetchSales();
+    window.addEventListener("userLogin", handleLogin);
+    return () => window.removeEventListener("userLogin", handleLogin);
+  }, [fetchSales]);
+
+  const addSalesReport = async (report: any) => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    try {
+      // Map frontend keys to DB keys
+      const dbReport = {
+        date: report.reportDate,
+        product_name: report.productName,
+        category: report.category,
+        quantity: report.quantity,
+        unit_price: report.unitPrice,
+        total_amount: report.totalAmount,
+        customer_type: report.customerName,
+        payment_method: report.paymentMethod,
+        order_number: report.orderNumber,
+        company_id: savedUser.company_id,
+        status: report.status || "Completed"
+      };
+
+      const response = await fetch('http://localhost:5000/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reports: [dbReport] }),
+      });
+
+      if (response.ok) {
+        toast.success("Sale recorded successfully!");
+        await fetchSales();
       }
-      
-      if (newReports.length > 0) {
-        setSalesReports(prev => [...newReports, ...prev]);
-        toast.success(`Successfully imported ${newReports.length} sales reports!`);
-      } else {
-        toast.error("No valid data found in CSV file");
-      }
-    } catch (error) {
-      toast.error("Failed to import CSV file. Please check the format.");
-      console.error("CSV Import Error:", error);
+    } catch (err) {
+      toast.error("Failed to save to database");
     }
   };
 
-  const getSalesReportById = (id: string) => {
-    return salesReports.find(report => report.id === id);
+  // 6. IMPORT CSV (Strict formatting and backend mapping)
+  const importFromCSV = async (csvData: string) => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!savedUser.company_id) return;
+
+    const lines = csvData.trim().split('\n');
+    
+    // Strip quotes and \r from headers
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["\r]/g, ''));
+    
+    const reportsToImport = lines.slice(1).map(line => {
+      if (!line.trim()) return null; // Skip empty lines at the end of the file
+      
+      const values = line.split(',').map(v => v.trim().replace(/["\r]/g, ''));
+      const row: any = {};
+      headers.forEach((header, index) => { row[header] = values[index]; });
+
+      // CRITICAL FIX: These keys must exactly match your MySQL table columns
+      return {
+        date: row.date || new Date().toISOString().split('T')[0],
+        product_name: row.product_name || row.product_line || "Unknown",
+        category: row.category || row.product_line || "General",
+        quantity: Number(row.quantity) || 1,
+        unit_price: Number(row.unit_price) || 0,
+        total_amount: Number(row.total_amount) || Number(row.total) || 0,
+        customer_type: row.customer_type || row.client_type || "Retail",
+        payment_method: row.payment_method || row.payment || "Cash",
+        order_number: row.order_number || `IMP-${Date.now()}`,
+        company_id: savedUser.company_id
+      };
+    }).filter(Boolean); // Remove null rows
+
+    try {
+      const response = await fetch('http://localhost:5000/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reports: reportsToImport }),
+      });
+
+      if (response.ok) {
+        toast.success(`Imported ${reportsToImport.length} records!`);
+        await fetchSales(); 
+      } else {
+        toast.error("Database rejected the format");
+      }
+    } catch (err) {
+      toast.error("Import failed");
+    }
+  };
+
+  const updateSalesReport = async (id: string, report: any) => {
+    // Extract the numeric ID from "SR-001"
+    const dbId = id.replace("SR-", "");
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/sales/${dbId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportDate: report.reportDate,
+          orderNumber: report.orderNumber,
+          productName: report.productName,
+          category: report.category,
+          quantity: report.quantity,
+          unitPrice: report.unitPrice,
+          totalAmount: report.totalAmount,
+          customerName: report.customerName,
+          paymentMethod: report.paymentMethod,
+          status: report.status
+        }),
+      });
+
+      if (response.ok) {
+        toast.success("Report updated successfully");
+        await fetchSales(); // This refreshes the UI
+      } else {
+        const errorData = await response.json();
+        console.error("Server Error:", errorData);
+        toast.error("Failed to update on server");
+      }
+    } catch (err) {
+      console.error("Network Error:", err);
+      toast.error("Network error: Could not reach server");
+    }
+  };
+
+  const deleteSalesReport = async (id: string) => {
+    const dbId = id.replace("SR-", "");
+    try {
+      const response = await fetch(`http://localhost:5000/api/sales/${dbId}`, { method: 'DELETE' });
+      if (response.ok) { await fetchSales(); toast.success("Deleted"); }
+    } catch (err) { toast.error("Delete failed"); }
   };
 
   return (
-    <SalesReportsContext.Provider
-      value={{
-        salesReports,
-        addSalesReport,
-        updateSalesReport,
-        deleteSalesReport,
-        importFromCSV,
-        getSalesReportById
-      }}
-    >
+    <SalesReportsContext.Provider value={{ salesReports, addSalesReport, updateSalesReport, deleteSalesReport, importFromCSV, fetchSales }}>
       {children}
     </SalesReportsContext.Provider>
   );
 }
 
-export function useSalesReports() {
+export const useSalesReports = () => {
   const context = useContext(SalesReportsContext);
-  if (context === undefined) {
-    throw new Error("useSalesReports must be used within a SalesReportsProvider");
-  }
+  if (!context) throw new Error("useSalesReports must be used within SalesReportsProvider");
   return context;
-}
+};
