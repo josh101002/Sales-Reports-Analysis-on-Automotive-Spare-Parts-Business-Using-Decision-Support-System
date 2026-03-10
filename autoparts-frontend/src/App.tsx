@@ -31,7 +31,7 @@ export interface GlobalFilters {
 }
 
 function AppContent() {
-  // 1. Authentication and User States
+  // Authentication and User States
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<{ role: string; company_id: number; email: string; user_name?: string } | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); 
@@ -52,14 +52,14 @@ function AppContent() {
     priceRange: { min: 0, max: 1000 }
   });
 
-  // 2. FIXED: Check localStorage on Mount
+  // Check localStorage on Mount
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
-        setIsAuthenticated(false); // Must be true to enter the app
+        setIsAuthenticated(false); 
       } catch (e) {
         console.error("Failed to parse saved user", e);
         localStorage.removeItem("user");
@@ -69,15 +69,15 @@ function AppContent() {
     setIsCheckingAuth(false);
   }, []);
 
-  // 3. UPDATED: Single handleLogin to trigger immediate transition
+  // Single handleLogin to trigger immediate transition
   const handleLogin = (userData: any) => {
-    // 1. Save to local storage so Context can find it
+    // Save to local storage so Context can find it
     localStorage.setItem("user", JSON.stringify(userData)); 
     
-    // 2. Dispatch the event
+    // Dispatch the event
     window.dispatchEvent(new Event("userLogin")); 
     
-    // 3. Update App state
+    // Update App state
     setUser(userData);
     setIsAuthenticated(true);
   };
@@ -91,7 +91,7 @@ function AppContent() {
     window.location.href = "/"; 
   };
 
-  // 4. NEW: Monitor user changes for debugging/tracking
+  // Monitor user changes for debugging/tracking
   useEffect(() => {
     if (isAuthenticated && user?.company_id) {
         console.log("Active session for company:", user.company_id);

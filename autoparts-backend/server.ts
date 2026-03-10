@@ -22,7 +22,7 @@ app.post('/api/register', async (req, res) => {
                 company_name: companyName,
                 business_address: businessAddress || "Main Office",
                 email: email,
-                password_hash: password // In a real app, hash this!
+                password_hash: password 
             }
         });
         res.status(200).json({ role: 'admin', company_id: company.company_id, email });
@@ -63,7 +63,7 @@ app.post('/api/login', async (req, res) => {
 
 // --- INVENTORY ROUTES ---
 
-// Fetch Inventory: Prisma automatically handles company-based filtering
+// Fetch Inventory
 app.get('/api/inventory', async (req, res) => {
     const company_id = parseInt(req.query.company_id as string);
     try {
@@ -76,15 +76,14 @@ app.get('/api/inventory', async (req, res) => {
     }
 });
 
-// Update Inventory: Prisma ensures 'current_stock' is treated as a number
+// Update Inventory
 app.put('/api/inventory/:id', async (req, res) => {
     const productId = parseInt(req.params.id);
     
-    // 1. Destructure ALL missing fields from the request
     const { 
         product_name, category, current_stock, unit_cost, 
         status, user_id, user_name, role, company_id,
-        min_stock, sku, supplier, location // <--- ADD THESE
+        min_stock, sku, supplier, location 
     } = req.body;
 
     try {
@@ -96,7 +95,6 @@ app.put('/api/inventory/:id', async (req, res) => {
                 current_stock: Number(current_stock),
                 unit_cost: Number(unit_cost),
                 status,
-                // 2. Add them to the database update call
                 min_stock: Number(min_stock),
                 sku,
                 supplier,
@@ -104,7 +102,6 @@ app.put('/api/inventory/:id', async (req, res) => {
             }
         });
 
-        // 3. Keep your Activity Log logic (it's great for your thesis!)
         await prisma.activity_logs.create({
             data: {
                 company_id: Number(company_id),
@@ -181,9 +178,9 @@ app.post('/api/team', async (req, res) => {
             data: {
                 full_name: fullName,
                 email: email,
-                password_hash: password, // In production, hash this!
+                password_hash: password,
                 company_id: Number(company_id),
-                role: 'Business' // This maps to your Enum in schema.prisma
+                role: 'Business' 
             }
         });
         res.status(200).json(newUser);
@@ -235,7 +232,7 @@ app.post('/api/sales', async (req, res) => {
                 unit_price: Number(r.unit_price),
                 total_amount: Number(r.total_amount),
                 payment_method: r.payment_method || "Cash",
-                status: r.status || "Completed" // <--- ADD THIS LINE
+                status: r.status || "Completed" 
             }))
         });
         res.status(200).json({ count: result.count });
@@ -258,7 +255,7 @@ app.put('/api/sales/:id', async (req, res) => {
         totalAmount, 
         customerName,
         paymentMethod,
-        status // <--- Destructure status from req.body
+        status 
     } = req.body;
 
     try {

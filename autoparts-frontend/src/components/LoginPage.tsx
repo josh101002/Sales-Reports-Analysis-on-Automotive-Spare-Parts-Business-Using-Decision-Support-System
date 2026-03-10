@@ -16,7 +16,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
-  // Added businessAddress state
   const [businessAddress, setBusinessAddress] = useState(""); 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

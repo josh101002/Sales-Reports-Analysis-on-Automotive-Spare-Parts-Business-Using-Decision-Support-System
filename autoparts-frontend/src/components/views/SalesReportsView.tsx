@@ -13,41 +13,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { GlobalFilters } from "../../App";
 import { useSalesReports, SalesReport } from "../../contexts/SalesReportsContext";
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  Area,
-  AreaChart,
-  PieChart,
-  Pie,
-  Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area,
+  AreaChart, PieChart, Pie, Cell
 } from "recharts";
 import { 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowUpRight, 
-  Download, 
-  FileText, 
-  DollarSign, 
-  ShoppingCart, 
-  Package, 
-  Activity,
-  Plus,
-  Pencil,
-  Trash2,
-  Upload,
-  FileSpreadsheet,
-  Search,
-  X,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown
+  TrendingUp, TrendingDown, ArrowUpRight, Download, FileText, DollarSign, ShoppingCart, Package, Activity,
+  Plus, Pencil, Trash2, Upload, FileSpreadsheet, Search, X, ArrowUpDown, ArrowUp, ArrowDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -144,7 +115,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
   const growthRate = useMemo(() => {
     if (salesReports.length === 0) return 0;
 
-    // 1. Group revenue by Year-Month
+    // Group revenue by Year-Month
     const monthlyRevenue: { [key: string]: number } = {};
     salesReports.forEach(report => {
       const date = new Date(report.reportDate);
@@ -152,7 +123,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
       monthlyRevenue[key] = (monthlyRevenue[key] || 0) + report.totalAmount;
     });
 
-    // 2. Sort the months to find the most recent ones
+    // Sort the months to find the most recent ones
     const sortedMonths = Object.keys(monthlyRevenue).sort().reverse();
     
     if (sortedMonths.length < 2) return 0; // Need at least 2 months to compare
@@ -160,7 +131,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
     const latestMonthRev = monthlyRevenue[sortedMonths[0]];   // e.g., August 2021
     const previousMonthRev = monthlyRevenue[sortedMonths[1]]; // e.g., July 2021
 
-    // 3. Calculate Percentage Growth: ((New - Old) / Old) * 100
+    // Calculate Percentage Growth: ((New - Old) / Old) * 100
     if (previousMonthRev === 0) return 0;
     const percentage = ((latestMonthRev - previousMonthRev) / previousMonthRev) * 100;
     

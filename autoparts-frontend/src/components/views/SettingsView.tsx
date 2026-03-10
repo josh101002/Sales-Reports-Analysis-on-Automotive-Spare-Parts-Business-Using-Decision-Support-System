@@ -9,33 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Separator } from "../ui/separator";
 import { Badge } from "../ui/badge";
 import { 
-  User, 
-  Bell, 
-  Database, 
-  Shield, 
-  Palette,
-  Download,
-  Upload,
-  Mail,
-  Smartphone,
-  DollarSign,
-  Clock,
-  Save,
-  AlertCircle,
-  Users,
-  UserPlus,
-  Building2
+  User, Bell, Database, Shield, Palette, Download, Upload, Mail, Smartphone, DollarSign, Clock, Save,
+  AlertCircle, Users, UserPlus, Building2
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "../ui/dialog";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "../ui/table";
 
 interface TeamMember {

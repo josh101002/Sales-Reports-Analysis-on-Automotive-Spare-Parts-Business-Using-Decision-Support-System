@@ -21,7 +21,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
 } from "./ui/sidebar";
-import { Badge } from "./ui/badge"; // Ensure you have a Badge component
+import { Badge } from "./ui/badge"; 
 import { ForwardRefExoticComponent, RefAttributes } from "react";
 import { LucideProps } from "lucide-react";
 
@@ -42,7 +42,7 @@ export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) 
     key: string;
   }
 
-  // Define the menu structure with conditional filtering
+  // Menu structure with conditional filtering
   const menuItems = [
     {
       title: "Overview",
@@ -55,7 +55,6 @@ export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) 
       title: "Sales & Analytics",
       // Staff cannot see financial or predictive data
       items: isStaff ? [] : [
-        { title: "Sales Reports", icon: BarChart3, key: "sales-reports" },
         { title: "Predictions & Trends", icon: LineChart, key: "predictions-trends" },
         { title: "Analytics", icon: TrendingUp, key: "analytics" },
         { title: "Recommendations", icon: Brain, key: "recommendations" },
@@ -65,6 +64,7 @@ export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) 
       title: "Inventory Management",
       // BOTH Roles can access these
       items: [
+        { title: "Sales Reports", icon: BarChart3, key: "sales-reports" },
         { title: "Inventory", icon: Package, key: "inventory" },
         { title: "Suppliers", icon: Truck, key: "suppliers" },
       ],

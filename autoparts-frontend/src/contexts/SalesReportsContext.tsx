@@ -1,4 +1,3 @@
-// salesreportcontext.tsx - FIXED MAPPING
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { toast } from "sonner";
 
@@ -106,7 +105,7 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 6. IMPORT CSV (Strict formatting and backend mapping)
+  // IMPORT CSV 
   const importFromCSV = async (csvData: string) => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
     if (!savedUser.company_id) return;
@@ -123,7 +122,6 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
       const row: any = {};
       headers.forEach((header, index) => { row[header] = values[index]; });
 
-      // CRITICAL FIX: These keys must exactly match your MySQL table columns
       return {
         date: row.date || new Date().toISOString().split('T')[0],
         product_name: row.product_name || row.product_line || "Unknown",
