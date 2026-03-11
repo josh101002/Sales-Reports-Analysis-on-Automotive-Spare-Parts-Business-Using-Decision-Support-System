@@ -106,7 +106,7 @@ export function RecommendationsView({ globalFilters }: RecommendationsViewProps)
     });
 
     // Pricing optimization based on inventory
-    const overStockedItems = inventory.filter(item => item.currentStock > item.reorderPoint * 1.5);
+    const overStockedItems = inventory.filter(item => item.currentStock > /*item.reorderPoint */ 1.5);
     if (overStockedItems.length > 0) {
       recs.push({
         id: "pricing-overstocked",

@@ -46,15 +46,15 @@ export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) 
   const menuItems = [
     {
       title: "Overview",
-      // Staff cannot see the main Dashboard
       items: isStaff ? [] : [
         { title: "Dashboard", icon: Home, key: "dashboard" },
       ],
     },
     {
       title: "Sales & Analytics",
-      // Staff cannot see financial or predictive data
+      // Staff cannot see the advanced DSS features (Predictions, Analytics, etc.)
       items: isStaff ? [] : [
+        { title: "Sales Reports", icon: BarChart3, key: "sales-reports" },
         { title: "Predictions & Trends", icon: LineChart, key: "predictions-trends" },
         { title: "Analytics", icon: TrendingUp, key: "analytics" },
         { title: "Recommendations", icon: Brain, key: "recommendations" },
@@ -62,21 +62,20 @@ export function AppSidebar({ activeView, onViewChange, user }: AppSidebarProps) 
     },
     {
       title: "Inventory Management",
-      // BOTH Roles can access these
+      // We add "Sales Reports" here for Staff so they have access to CRUD actions
       items: [
-        { title: "Sales Reports", icon: BarChart3, key: "sales-reports" },
+        ...(isStaff ? [{ title: "Sales Reports", icon: BarChart3, key: "sales-reports" }] : []),
         { title: "Inventory", icon: Package, key: "inventory" },
         { title: "Suppliers", icon: Truck, key: "suppliers" },
       ],
     },
     {
       title: "Configuration",
-      // Staff cannot access Settings
       items: isStaff ? [] : [
         { title: "Settings", icon: Settings, key: "settings" },
       ],
     },
-  ].filter(group => group.items.length > 0); // Remove empty groups for Staff
+  ].filter(group => group.items.length > 0);
 
   return (
     <Sidebar>

@@ -26,10 +26,13 @@ import * as XLSX from "xlsx";
 
 interface SalesReportsViewProps {
   globalFilters?: GlobalFilters;
+  user: { role?: string } | null;
 }
 
-export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
+export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps) {
+ const isStaff = user?.role === 'staff' || user?.role === 'Business';
   const { salesReports, addSalesReport, updateSalesReport, deleteSalesReport, importFromCSV } = useSalesReports();
+  
 
   // Dynamic Chart Calculations
   const salesTrendData = useMemo(() => {
@@ -569,14 +572,20 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
           </p>
         </div>
         <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => setImportModalOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import
-          </Button>
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
+          {/* HIDE FOR STAFF */}
+          {!isStaff && (
+            <>
+              <Button variant="outline" onClick={() => setImportModalOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            </>
+          )}
+          
           <Button 
             className="bg-gradient-to-r from-[#FF6B00] to-[#FF8A50]" 
             onClick={handleAddReport}
@@ -588,6 +597,7 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
       </motion.div>
 
       {/* Summary Cards */}
+      {!isStaff && (
       <motion.div className="grid grid-cols-1 md:grid-cols-4 gap-6" variants={containerVariants}>
         <motion.div 
           variants={itemVariants} 
@@ -694,14 +704,17 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
           </Card>
         </motion.div>
       </motion.div>
+    )}
 
       <Tabs defaultValue="reports" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="reports">Sales Reports</TabsTrigger>
-          <TabsTrigger value="revenue">Revenue Analysis</TabsTrigger>
-          <TabsTrigger value="products">Product Performance</TabsTrigger>
-          <TabsTrigger value="categories">Category Breakdown</TabsTrigger>
-        </TabsList>
+        {!isStaff && (
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="reports">Sales Reports</TabsTrigger>
+            <TabsTrigger value="revenue">Revenue Analysis</TabsTrigger>
+            <TabsTrigger value="products">Product Performance</TabsTrigger>
+            <TabsTrigger value="categories">Category Breakdown</TabsTrigger>
+          </TabsList>
+        )}
 
         <TabsContent value="reports" className="space-y-6">
           <Card className="border-0 shadow-lg">
@@ -875,7 +888,9 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
             </CardContent>
           </Card>
         </TabsContent>
-
+      
+      {!isStaff && (
+        <>
         <TabsContent value="revenue" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border-0 shadow-lg">
@@ -1039,7 +1054,10 @@ export function SalesReportsView({ globalFilters }: SalesReportsViewProps) {
             </Card>
           </div>
         </TabsContent>
+        </>
+      )}
       </Tabs>
+    
 
       {/* Add/Edit Sales Report Modal */}
       <Dialog open={addEditModalOpen} onOpenChange={setAddEditModalOpen}>

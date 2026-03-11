@@ -37,8 +37,12 @@ function AppContent() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); 
 
   const [activeView, setActiveView] = useState(() => {
-  const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    return (savedUser.role === 'staff' || savedUser.role === 'Business') ? "inventory" : "dashboard";
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    
+    // If user is staff, set default view to 'sales-reports'
+    return (savedUser.role === 'staff' || savedUser.role === 'Business') 
+      ? "sales-reports" 
+      : "dashboard";
   });
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const { inventory, setInventory } = useInventory(); 
@@ -71,15 +75,19 @@ function AppContent() {
 
   // Single handleLogin to trigger immediate transition
   const handleLogin = (userData: any) => {
-    // Save to local storage so Context can find it
-    localStorage.setItem("user", JSON.stringify(userData)); 
-    
-    // Dispatch the event
-    window.dispatchEvent(new Event("userLogin")); 
-    
-    // Update App state
-    setUser(userData);
-    setIsAuthenticated(true);
+      // Save to local storage
+      localStorage.setItem("user", JSON.stringify(userData)); 
+      
+      // Dispatch the event
+      window.dispatchEvent(new Event("userLogin")); 
+      
+      // Update App state
+      setUser(userData);
+      setIsAuthenticated(true);
+
+      // Redirect based on role
+      const isStaff = userData.role === 'staff' || userData.role === 'Business';
+      setActiveView(isStaff ? "sales-reports" : "dashboard");
   };
 
   const handleLogout = () => {
@@ -132,7 +140,7 @@ function AppContent() {
       case "dashboard":
         return isStaff ? <InventoryView globalFilters={globalFilters} /> : <DashboardView globalFilters={globalFilters} />;
       case "sales-reports":
-        return <SalesReportsView globalFilters={globalFilters} />;
+        return <SalesReportsView globalFilters={globalFilters} user={user} />;
       case "predictions-trends":
         return <PredictionsTrendsView />; 
       case "analytics":
