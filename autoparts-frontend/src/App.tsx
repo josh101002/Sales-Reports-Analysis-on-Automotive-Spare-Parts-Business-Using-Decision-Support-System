@@ -150,7 +150,7 @@ function AppContent() {
       case "inventory":
         return <InventoryView globalFilters={globalFilters} />;
       case "suppliers":
-        return <SuppliersView />;
+        return <SuppliersView user={user} />;
       case "settings":
         // Role-based access control
         if (user?.role === 'admin') {

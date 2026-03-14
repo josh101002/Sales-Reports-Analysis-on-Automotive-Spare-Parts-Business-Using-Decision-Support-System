@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Badge } from "../ui/badge";
@@ -9,50 +9,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../ui/alert-dialog";
-import { Truck, MapPin, Star, TrendingUp, AlertCircle, Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Truck, MapPin, Star, TrendingUp, AlertCircle, Plus, Search, Pencil, Trash2, TrendingDown } from "lucide-react";
 import { motion } from "motion/react";
 import { spring } from "motion";
 import { toast } from "sonner";
 import { useSuppliers, Supplier } from "../../contexts/SuppliersContext";
 
-const recentOrders = [
-  {
-    orderId: "PO-2024-1089",
-    supplier: "BrakeTech Pro",
-    items: "Ceramic Brake Pads x50",
-    amount: 4499.50,
-    orderDate: "2024-10-01",
-    expectedDelivery: "2024-10-03",
-    status: "Delivered"
-  },
-  {
-    orderId: "PO-2024-1090", 
-    supplier: "IgniteCore",
-    items: "Spark Plugs x100",
-    amount: 4599.00,
-    orderDate: "2024-10-02",
-    expectedDelivery: "2024-10-04",
-    status: "In Transit"
-  },
-  {
-    orderId: "PO-2024-1091",
-    supplier: "FilterMax Inc", 
-    items: "Oil Filters x75",
-    amount: 1837.50,
-    orderDate: "2024-10-03",
-    expectedDelivery: "2024-10-07",
-    status: "Processing"
-  }
-];
+interface SuppliersViewProps {
+  user: { role?: string } | null;
+}
 
-export function SuppliersView() {
+export function SuppliersView({ user }: SuppliersViewProps) {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliers();
+  const isStaff = user?.role === 'staff' || user?.role === 'Business';
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [addSupplierOpen, setAddSupplierOpen] = useState(false);
   const [editSupplierOpen, setEditSupplierOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [modalOpen, setModalOpen] = useState<string | null>(null);
+  
+  const fetchPO = async () => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const response = await fetch(`http://localhost:5000/api/purchase-orders?company_id=${savedUser.company_id}`);
+    const data = await response.json();
+    setPurchaseOrders(data);
+  };
+
+  useEffect(() => {
+    fetchPO();
+  }, []);
   
   // Form state for add supplier
   const [newSupplier, setNewSupplier] = useState({
@@ -74,32 +62,19 @@ export function SuppliersView() {
     phone: "",
     deliveryTime: "",
     rating: 4.0,
-    reliability: 95,
     totalOrders: 0,
     totalSpent: 0
   });
 
   const handleAddSupplier = () => {
     if (!newSupplier.name || !newSupplier.category || !newSupplier.contact) {
-      toast.error("Please fill in all required fields");
+      toast.error("Please fill in Name, Category, and Contact");
       return;
     }
-    
     addSupplier(newSupplier);
-    
-    toast.success(`Supplier "${newSupplier.name}" added successfully!`);
-    
+    toast.success(`Supplier ${newSupplier.name} added!`);
     setAddSupplierOpen(false);
-    // Reset form
-    setNewSupplier({
-      name: "",
-      category: "",
-      location: "",
-      contact: "",
-      phone: "",
-      deliveryTime: "",
-      rating: 4.0
-    });
+    setNewSupplier({ name: "", category: "", location: "", contact: "", phone: "", deliveryTime: "", rating: 4.0 });
   };
 
   const handleEditClick = (supplier: Supplier) => {
@@ -112,7 +87,6 @@ export function SuppliersView() {
       phone: supplier.phone,
       deliveryTime: supplier.deliveryTime,
       rating: supplier.rating,
-      reliability: supplier.reliability,
       totalOrders: supplier.totalOrders,
       totalSpent: supplier.totalSpent
     });
@@ -121,18 +95,16 @@ export function SuppliersView() {
 
   const handleUpdateSupplier = () => {
     if (!selectedSupplier) return;
-    
-    if (!editForm.name || !editForm.category || !editForm.contact) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-    
-    updateSupplier(selectedSupplier.id, editForm);
-    
-    toast.success(`Supplier "${editForm.name}" updated successfully!`);
-    
+
+    const updatedData = {
+      ...editForm,
+      totalOrders: Number(editForm.totalOrders),
+      totalSpent: Number(editForm.totalSpent)
+    };
+
+    updateSupplier(selectedSupplier.id, updatedData);
+    toast.success("Supplier updated successfully");
     setEditSupplierOpen(false);
-    setSelectedSupplier(null);
   };
 
   const handleDeleteClick = (supplier: Supplier) => {
@@ -142,13 +114,9 @@ export function SuppliersView() {
 
   const handleConfirmDelete = () => {
     if (!selectedSupplier) return;
-    
     deleteSupplier(selectedSupplier.id);
-    
-    toast.success(`Supplier "${selectedSupplier.name}" deleted successfully!`);
-    
+    toast.success("Supplier deleted");
     setDeleteDialogOpen(false);
-    setSelectedSupplier(null);
   };
 
   const containerVariants = {
@@ -199,8 +167,8 @@ export function SuppliersView() {
 
   const activeSuppliers = suppliers.filter(s => s.status === "Active").length;
   const avgRating = suppliers.length > 0 ? (suppliers.reduce((sum, s) => sum + s.rating, 0) / suppliers.length) : 0;
-  const totalSpend = suppliers.reduce((sum, s) => sum + s.totalSpent, 0);
-  const avgReliability = suppliers.length > 0 ? (suppliers.reduce((sum, s) => sum + s.reliability, 0) / suppliers.length) : 0;
+  const totalSpend = suppliers.reduce((sum, s) => sum + (Number(s.totalSpent) || 0), 0);
+
 
   return (
     <motion.div
@@ -223,55 +191,62 @@ export function SuppliersView() {
       </motion.div>
 
       {/* Summary Cards - Clickable with Modals */}
-      <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-6" variants={containerVariants}>
-        <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Card 
-            className="border-0 shadow-lg cursor-pointer hover:shadow-xl transition-all"
-            onClick={() => setModalOpen("active")}
-          >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm">Active Suppliers</CardTitle>
-              <div className="p-2 bg-gradient-to-br from-[#FF6B00] to-[#FF8A50] rounded-lg">
-                <Truck className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl mb-1">{activeSuppliers}</div>
-              <p className="text-sm text-muted-foreground">
-                {suppliers.length} total suppliers
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {!isStaff && (
+        <motion.div className="grid grid-cols-1 md:grid-cols-2 gap-6" variants={containerVariants}>
+          <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Card 
+              className="border-0 shadow-lg cursor-pointer hover:shadow-xl transition-all"
+              onClick={() => setModalOpen("active")}
+            >
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm">Active Suppliers</CardTitle>
+                <div className="p-2 bg-gradient-to-br from-[#FF6B00] to-[#FF8A50] rounded-lg">
+                  <Truck className="h-4 w-4 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl mb-1">{activeSuppliers}</div>
+                <p className="text-sm text-muted-foreground">
+                  {suppliers.length} total suppliers
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-        <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Card 
-            className="border-0 shadow-lg cursor-pointer hover:shadow-xl transition-all"
-            onClick={() => setModalOpen("spend")}
-          >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm">Total Spend</CardTitle>
-              <div className="p-2 bg-gradient-to-br from-[#212121] to-[#424242] rounded-lg">
-                <TrendingUp className="h-4 w-4 text-white" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl mb-1">${(totalSpend / 1000).toFixed(1)}K</div>
-              <p className="text-sm text-muted-foreground">
-                This year
-              </p>
-            </CardContent>
-          </Card>
+          <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+            <Card 
+              className="border-0 shadow-lg cursor-pointer hover:shadow-xl transition-all"
+              onClick={() => setModalOpen("spend")}
+            >
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm">Total Spend</CardTitle>
+                <div className="p-2 bg-gradient-to-br from-[#212121] to-[#424242] rounded-lg">
+                  <TrendingUp className="h-4 w-4 text-white" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl mb-1">
+                  {totalSpend >= 1000 
+                    ? `$${(totalSpend / 1000).toFixed(1)}K` 
+                    : `$${totalSpend.toLocaleString()}`}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This year
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
 
       <Tabs defaultValue="suppliers" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="suppliers">All Suppliers</TabsTrigger>
-          <TabsTrigger value="orders">Purchase Orders</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-        </TabsList>
-
+        {!isStaff && (
+          <TabsList>
+            <TabsTrigger value="suppliers">All Suppliers</TabsTrigger>
+            <TabsTrigger value="orders">Purchase Orders</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+          </TabsList>
+        )}
         <TabsContent value="suppliers" className="space-y-4">
           {/* Search and Filter */}
           <div className="flex items-center space-x-4">
@@ -296,7 +271,7 @@ export function SuppliersView() {
                     <TableHead>Category</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Delivery Time</TableHead>
-                    <TableHead>Total Orders</TableHead>
+                    <TableHead>Total Units Ordered</TableHead>
                     <TableHead>Total Spent</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -319,7 +294,7 @@ export function SuppliersView() {
                         </div>
                       </TableCell>
                       <TableCell>{supplier.deliveryTime}</TableCell>
-                      <TableCell>{supplier.totalOrders}</TableCell>
+                      <TableCell>{supplier.totalOrders.toLocaleString()}</TableCell>
                       <TableCell>${supplier.totalSpent.toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(supplier.status)}</TableCell>
                       <TableCell className="text-right">
@@ -349,123 +324,134 @@ export function SuppliersView() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="orders" className="space-y-4">
-          <Card className="border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle>Recent Purchase Orders</CardTitle>
-              <CardDescription>
-                Latest orders placed with suppliers
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Order Date</TableHead>
-                    <TableHead>Expected Delivery</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentOrders.map((order) => (
-                    <TableRow key={order.orderId}>
-                      <TableCell className="font-medium">{order.orderId}</TableCell>
-                      <TableCell>{order.supplier}</TableCell>
-                      <TableCell>{order.items}</TableCell>
-                      <TableCell>${order.amount.toLocaleString()}</TableCell>
-                      <TableCell>{order.orderDate}</TableCell>
-                      <TableCell>{order.expectedDelivery}</TableCell>
-                      <TableCell>{getOrderStatusBadge(order.status)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="performance" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {!isStaff && (
+          <>
+          <TabsContent value="orders" className="space-y-4">
             <Card className="border-0 shadow-lg">
               <CardHeader>
-                <CardTitle>Top Performing Suppliers</CardTitle>
+                <CardTitle>Recent Purchase Orders</CardTitle>
                 <CardDescription>
-                  Based on total spare parts delivered and delivery performance
+                  Latest orders placed with suppliers
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {suppliers
-                    .sort((a, b) => {
-                      // Sort by total orders first, then by reliability
-                      const orderDiff = b.totalOrders - a.totalOrders;
-                      if (orderDiff !== 0) return orderDiff;
-                      return b.reliability - a.reliability;
-                    })
-                    .slice(0, 5)
-                    .map((supplier, index) => (
-                      <div key={supplier.id} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-gradient-to-br from-[#FF6B00] to-[#FF8A50] rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-white">
-                              {index + 1}
-                            </span>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order ID</TableHead>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Order Date</TableHead>
+                      <TableHead>Expected Delivery</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {purchaseOrders.length > 0 ? (
+                      purchaseOrders.map((po) => (
+                        <TableRow key={po.po_id}>
+                          <TableCell className="font-medium">PO-{po.po_id}</TableCell>
+                          <TableCell>{po.suppliers?.supplier_name}</TableCell>
+                          <TableCell>Inventory Reorder</TableCell>
+                          <TableCell>${Number(po.total_amount).toLocaleString()}</TableCell>
+                          <TableCell>{new Date(po.order_date).toLocaleDateString()}</TableCell>
+                          <TableCell>{po.delivery_date ? new Date(po.delivery_date).toLocaleDateString() : "TBD"}</TableCell>
+                          <TableCell>{getOrderStatusBadge(po.status)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-10">No orders found.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="performance" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle>Top Performing Suppliers</CardTitle>
+                  <CardDescription>
+                    Based on total spare parts delivered and delivery performance
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {suppliers
+                      .sort((a, b) => {
+                        // Sort by total orders first, then by reliability
+                        const orderDiff = b.totalOrders - a.totalOrders;
+                        if (orderDiff !== 0) return orderDiff;
+                        return b.reliability - a.reliability;
+                      })
+                      .slice(0, 5)
+                      .map((supplier, index) => (
+                        <div key={supplier.id} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-[#FF6B00] to-[#FF8A50] rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-white">
+                                {index + 1}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium">{supplier.name}</p>
+                              <p className="text-sm text-muted-foreground">{supplier.category}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">{supplier.name}</p>
-                            <p className="text-sm text-muted-foreground">{supplier.category}</p>
+                          <div className="text-right">
+                            <p className="font-medium">{supplier.totalOrders} parts</p>
+                            <p className="text-xs text-muted-foreground">{supplier.reliability}% on-time</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-medium">{supplier.totalOrders} parts</p>
-                          <p className="text-xs text-muted-foreground">{supplier.reliability}% on-time</p>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle>Delivery Performance</CardTitle>
+                  <CardDescription>
+                    Average delivery times by supplier
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {suppliers.map((supplier) => (
+                      <div key={supplier.id} className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">{supplier.name}</span>
+                          <span className="text-sm">{supplier.deliveryTime}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              supplier.deliveryTime.includes('1-2') ? 'bg-green-600' :
+                              supplier.deliveryTime.includes('2-3') || supplier.deliveryTime.includes('2-4') ? 'bg-blue-600' :
+                              supplier.deliveryTime.includes('3-5') ? 'bg-yellow-600' : 'bg-red-600'
+                            }`}
+                            style={{ 
+                              width: `${Math.max(20, 100 - (parseInt(supplier.deliveryTime) * 15))}%` 
+                            }}
+                          ></div>
                         </div>
                       </div>
                     ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Delivery Performance</CardTitle>
-                <CardDescription>
-                  Average delivery times by supplier
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {suppliers.map((supplier) => (
-                    <div key={supplier.id} className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">{supplier.name}</span>
-                        <span className="text-sm">{supplier.deliveryTime}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            supplier.deliveryTime.includes('1-2') ? 'bg-green-600' :
-                            supplier.deliveryTime.includes('2-3') || supplier.deliveryTime.includes('2-4') ? 'bg-blue-600' :
-                            supplier.deliveryTime.includes('3-5') ? 'bg-yellow-600' : 'bg-red-600'
-                          }`}
-                          style={{ 
-                            width: `${Math.max(20, 100 - (parseInt(supplier.deliveryTime) * 15))}%` 
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          </>
+        )}
       </Tabs>
+      
 
       {/* Add Supplier Dialog */}
       <Dialog open={addSupplierOpen} onOpenChange={setAddSupplierOpen}>
@@ -674,7 +660,7 @@ export function SuppliersView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label htmlFor="editSupplierReliability">Reliability (%)</Label>
                 <Input
                   id="editSupplierReliability"
@@ -684,16 +670,18 @@ export function SuppliersView() {
                   value={editForm.reliability}
                   onChange={(e) => setEditForm({...editForm, reliability: parseInt(e.target.value) || 0})}
                 />
-              </div>
+              </div> */}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editSupplierOrders">Total Orders</Label>
+                <Label htmlFor="editSupplierOrders">Total Units Orders</Label>
                 <Input
                   id="editSupplierOrders"
                   type="number"
                   min="0"
                   value={editForm.totalOrders}
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
                   onChange={(e) => setEditForm({...editForm, totalOrders: parseInt(e.target.value) || 0})}
                 />
               </div>
@@ -704,6 +692,8 @@ export function SuppliersView() {
                   type="number"
                   min="0"
                   value={editForm.totalSpent}
+                  disabled
+                  className="bg-gray-100 cursor-not-allowed"
                   onChange={(e) => setEditForm({...editForm, totalSpent: parseFloat(e.target.value) || 0})}
                 />
               </div>
@@ -742,45 +732,81 @@ export function SuppliersView() {
       </AlertDialog>
 
       {/* Active Suppliers Modal */}
-      <Dialog open={modalOpen === "active"} onOpenChange={() => setModalOpen(null)}>
-        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center">
-              <Truck className="w-5 h-5 mr-2" />
-              All Active Suppliers
-            </DialogTitle>
-            <DialogDescription>
-              Complete list of active supplier partnerships
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Orders</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {suppliers.map((supplier) => (
-                  <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">{supplier.name}</TableCell>
-                    <TableCell>{supplier.category}</TableCell>
-                    <TableCell>{supplier.location}</TableCell>
-                    <TableCell>{supplier.rating}</TableCell>
-                    <TableCell>{supplier.totalOrders}</TableCell>
-                    <TableCell>{getStatusBadge(supplier.status)}</TableCell>
+        <Dialog open={modalOpen === "active"} onOpenChange={() => setModalOpen(null)}>
+          <DialogContent 
+            style={{ maxWidth: '1100px', width: '95vw' }} 
+            className="max-h-[85vh] overflow-hidden flex flex-col"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Truck className="w-5 h-5 mr-2 text-[#FF6B00]" />
+                All Active Suppliers
+              </DialogTitle>
+              <DialogDescription>
+                Complete list of active supplier partnerships and their current metrics.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-4 flex-1 overflow-auto border rounded-lg">
+              <Table className="w-full table-fixed min-w-[900px]">
+                <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead className="w-[200px]">Supplier</TableHead>
+                    <TableHead className="w-[150px]">Category</TableHead>
+                    <TableHead className="w-[180px]">Location</TableHead>
+                    <TableHead className="w-[100px]">Rating</TableHead>
+                    <TableHead className="w-[120px]">Orders</TableHead>
+                    <TableHead className="w-[120px]">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+                </TableHeader>
+                <TableBody>
+                  {suppliers.length > 0 ? (
+                    suppliers.map((supplier) => (
+                      <TableRow key={supplier.id} className="hover:bg-slate-50/50 transition-colors">
+                        <TableCell className="font-semibold truncate" title={supplier.name}>
+                          {supplier.name}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal">
+                            {supplier.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-600 truncate">
+                          {supplier.location}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <Star className="w-3 h-3 text-yellow-500 mr-1 fill-yellow-500" />
+                            {Number(supplier.rating).toFixed(1)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {supplier.totalOrders} total
+                        </TableCell>
+                        <TableCell>{getStatusBadge(supplier.status)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                        No active suppliers found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <DialogFooter className="border-t pt-4 mt-2">
+              <div className="mr-auto text-sm text-muted-foreground font-medium">
+                Active Partnerships: <span className="text-black">{suppliers.length}</span>
+              </div>
+              <Button variant="outline" onClick={() => setModalOpen(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       {/* Rating Modal */}
       <Dialog open={modalOpen === "rating"} onOpenChange={() => setModalOpen(null)}>
@@ -831,43 +857,84 @@ export function SuppliersView() {
       </Dialog>
 
       {/* Spend Modal */}
-      <Dialog open={modalOpen === "spend"} onOpenChange={() => setModalOpen(null)}>
-        <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2" />
-              Total Spend Analysis
-            </DialogTitle>
-            <DialogDescription>
-              Spending breakdown by supplier
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supplier</TableHead>
-                  <TableHead>Total Orders</TableHead>
-                  <TableHead>Total Spent</TableHead>
-                  <TableHead>Avg Order Value</TableHead>
-                  <TableHead>Category</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {suppliers.sort((a, b) => b.totalSpent - a.totalSpent).map((supplier) => (
-                  <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">{supplier.name}</TableCell>
-                    <TableCell>{supplier.totalOrders}</TableCell>
-                    <TableCell className="font-bold">${supplier.totalSpent.toLocaleString()}</TableCell>
-                    <TableCell>${supplier.totalOrders > 0 ? Math.round(supplier.totalSpent / supplier.totalOrders).toLocaleString() : 0}</TableCell>
-                    <TableCell>{supplier.category}</TableCell>
+        <Dialog open={modalOpen === "spend"} onOpenChange={() => setModalOpen(null)}>
+          <DialogContent 
+            style={{ maxWidth: '1100px', width: '95vw' }} 
+            className="max-h-[85vh] overflow-hidden flex flex-col"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center text-xl">
+                <TrendingDown className="w-6 h-6 mr-2 text-[#212121]" />
+                Total Spend Analysis
+              </DialogTitle>
+              <DialogDescription>
+                Detailed spending breakdown and average order values by supplier for the current period.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-6 flex-1 overflow-auto border rounded-lg">
+              <Table className="w-full table-fixed min-w-[900px]">
+                <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                  <TableRow>
+                    <TableHead className="w-[250px]">Supplier</TableHead>
+                    <TableHead className="w-[120px] text-center">Total Orders</TableHead>
+                    <TableHead className="w-[180px]">Total Spent</TableHead>
+                    <TableHead className="w-[180px]">Avg Order Value</TableHead>
+                    <TableHead className="w-[170px]">Category</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+                </TableHeader>
+                <TableBody>
+                  {suppliers.length > 0 ? (
+                    suppliers.sort((a, b) => (Number(b.totalSpent) || 0) - (Number(a.totalSpent) || 0)).map((supplier) => (
+                      <TableRow key={supplier.id} className="hover:bg-slate-50/50 transition-colors">
+                        <TableCell className="font-semibold py-4">
+                          <div className="flex flex-col">
+                            <span className="truncate" title={supplier.name}>{supplier.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{supplier.id}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-slate-600">
+                          {supplier.totalOrders} orders
+                        </TableCell>
+                        <TableCell className="font-bold text-slate-900">
+                          ${(Number(supplier.totalSpent) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          <span className="bg-slate-100 px-2 py-1 rounded text-xs font-mono">
+                            ${supplier.totalOrders > 0 
+                              ? (Number(supplier.totalSpent) / supplier.totalOrders).toLocaleString(undefined, { minimumFractionDigits: 2 }) 
+                              : "0.00"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal border-slate-300">
+                            {supplier.category}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">
+                        No spending data available.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <DialogFooter className="border-t pt-4 mt-2">
+              <div className="mr-auto flex flex-col">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Total Company Procurement</span>
+                <span className="text-lg font-bold text-[#FF6B00]">${totalSpend.toLocaleString()}</span>
+              </div>
+              <Button variant="outline" className="h-10 px-8" onClick={() => setModalOpen(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       {/* Delivery Modal */}
       <Dialog open={modalOpen === "delivery"} onOpenChange={() => setModalOpen(null)}>

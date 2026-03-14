@@ -18,11 +18,12 @@ import {
 } from "recharts";
 import { 
   TrendingUp, TrendingDown, ArrowUpRight, Download, FileText, DollarSign, ShoppingCart, Package, Activity,
-  Plus, Pencil, Trash2, Upload, FileSpreadsheet, Search, X, ArrowUpDown, ArrowUp, ArrowDown
+  Plus, Pencil, Trash2, Upload, FileSpreadsheet, Search, X, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { useInventory } from "../../contexts/InventoryContext";
 
 interface SalesReportsViewProps {
   globalFilters?: GlobalFilters;
@@ -30,10 +31,10 @@ interface SalesReportsViewProps {
 }
 
 export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps) {
- const isStaff = user?.role === 'staff' || user?.role === 'Business';
+  const isStaff = user?.role === 'staff' || user?.role === 'Business';
   const { salesReports, addSalesReport, updateSalesReport, deleteSalesReport, importFromCSV } = useSalesReports();
+  const { inventory } = useInventory();
   
-
   // Dynamic Chart Calculations
   const salesTrendData = useMemo(() => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -108,6 +109,9 @@ export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps)
     notes: ""
   });
 
+  const selectedInvItem = inventory.find(i => i.name === formData.productName);
+  const isOverStock = !!selectedInvItem && formData.quantity > selectedInvItem.currentStock;
+
   // Calculate summary statistics
   const totalRevenue = salesReports.reduce((sum, report) => sum + report.totalAmount, 0);
   const totalOrders = salesReports.length;
@@ -131,8 +135,8 @@ export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps)
     
     if (sortedMonths.length < 2) return 0; // Need at least 2 months to compare
 
-    const latestMonthRev = monthlyRevenue[sortedMonths[0]];   // e.g., August 2021
-    const previousMonthRev = monthlyRevenue[sortedMonths[1]]; // e.g., July 2021
+    const latestMonthRev = monthlyRevenue[sortedMonths[0]];  
+    const previousMonthRev = monthlyRevenue[sortedMonths[1]]
 
     // Calculate Percentage Growth: ((New - Old) / Old) * 100
     if (previousMonthRev === 0) return 0;
@@ -440,6 +444,14 @@ export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps)
   };
 
   const handleSubmitReport = () => {
+    // 1. Final Stock Validation
+    const selectedInvItem = inventory.find(i => i.name === formData.productName);
+    
+    if (selectedInvItem && formData.quantity > selectedInvItem.currentStock) {
+      toast.error(`Cannot complete sale. Only ${selectedInvItem.currentStock} units available.`);
+      return; // Stop the function here
+    }
+
     setIsLoading(true);
     
     setTimeout(() => {
@@ -1096,34 +1108,46 @@ export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps)
 
             <div className="space-y-2">
               <Label htmlFor="productName">Product Name *</Label>
-              <Input
-                id="productName"
-                value={formData.productName}
-                onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
-                placeholder="Enter product name"
-                required
-              />
+              <Select 
+                value={formData.productName} 
+                onValueChange={(value: string) => {
+                  const selectedItem = inventory.find(item => item.name === value);
+                  if (selectedItem) {
+                    setFormData({ 
+                      ...formData, 
+                      productName: value,
+                      category: selectedItem.category, 
+                      unitPrice: selectedItem.unitCost  
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select product from inventory" />
+                </SelectTrigger>
+                <SelectContent>
+                  {inventory.length > 0 ? (
+                    inventory.map((item) => (
+                      <SelectItem key={item.id} value={item.name}>
+                        {item.name} ({item.currentStock} in stock)
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="none" disabled>No products in inventory</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
-                <Select 
-                value={formData.category} 
-                onValueChange={(value: string) => setFormData({ ...formData, category: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Engine Parts">Engine Parts</SelectItem>
-                  <SelectItem value="Brake System">Brake System</SelectItem>
-                  <SelectItem value="Filters">Filters</SelectItem>
-                  <SelectItem value="Electrical">Electrical</SelectItem>
-                  <SelectItem value="Suspension">Suspension</SelectItem>
-                  <SelectItem value="Lighting">Lighting</SelectItem>
-                  <SelectItem value="Accessories">Accessories</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                value={formData.category}
+                disabled
+                className="bg-gray-100" 
+                placeholder="Select a product first"
+              />
             </div>
 
             <div className="space-y-2">
@@ -1136,6 +1160,16 @@ export function SalesReportsView({ globalFilters, user }: SalesReportsViewProps)
                 onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
                 required
               />
+              {isOverStock && (
+                <motion.p 
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-[12px] font-medium text-red-500 mt-1 flex items-center gap-1"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" /> 
+                  Warning: Only {selectedInvItem.currentStock} units available in stock.
+                </motion.p>
+              )}
             </div>
 
             <div className="space-y-2">

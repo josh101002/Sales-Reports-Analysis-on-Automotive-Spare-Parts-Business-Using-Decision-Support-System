@@ -145,7 +145,7 @@ app.post('/api/inventory', async (req, res) => {
     }
 });
 
-// --- DELETE PRODUCT ---
+// DELETE PRODUCT
 app.delete('/api/inventory/:id', async (req, res) => {
     // Strip the 'INV' prefix if the frontend sends it
     const productId = parseInt(req.params.id.replace('INV', ''));
@@ -220,23 +220,71 @@ app.get('/api/sales', async (req, res) => {
 app.post('/api/sales', async (req, res) => {
     try {
         const { reports } = req.body;
-        const result = await prisma.sales_reports.createMany({
-            data: reports.map((r: any) => ({
-                company_id: Number(r.company_id),
-                date: new Date(r.date), 
-                order_number: r.order_number,
-                product_name: r.product_name,
-                category: r.category,
-                customer_type: r.customer_type || "Walk-in", 
-                quantity: Number(r.quantity),
-                unit_price: Number(r.unit_price),
-                total_amount: Number(r.total_amount),
-                payment_method: r.payment_method || "Cash",
-                status: r.status || "Completed" 
-            }))
+
+        const result = await prisma.$transaction(async (tx) => {
+            let processedCount = 0;
+
+            for (const r of reports) {
+                // Create the sale record
+                await tx.sales_reports.create({
+                    data: {
+                        company_id: Number(r.company_id),
+                        date: new Date(r.date),
+                        order_number: r.order_number,
+                        product_name: r.product_name,
+                        category: r.category,
+                        customer_type: r.customer_type || "Walk-in",
+                        quantity: Number(r.quantity),
+                        unit_price: Number(r.unit_price),
+                        total_amount: Number(r.total_amount),
+                        payment_method: r.payment_method || "Cash",
+                        status: r.status || "Completed"
+                    }
+                });
+
+                // Find the product in inventory
+                const inventoryItem = await tx.inventory.findFirst({
+                    where: { 
+                        product_name: r.product_name,
+                        company_id: Number(r.company_id)
+                    }
+                });
+
+                if (inventoryItem) {
+                    const currentStockNum = Number(inventoryItem.current_stock) || 0;
+                    const quantitySold = Number(r.quantity) || 0;
+                    const minStockNum = Number(inventoryItem.min_stock) || 0;
+
+                    const newStock = currentStockNum - quantitySold;
+
+                    if (newStock < 0) {
+                        throw new Error(`Insufficient stock for ${r.product_name}. Available: ${currentStockNum}`);
+                    }
+                    
+                    let newStatus: "Critical" | "Low_Stock" | "In_Stock" = "In_Stock";
+
+                    if (newStock <= minStockNum) {
+                        newStatus = "Critical";
+                    } else if (newStock <= minStockNum * 1.25) {
+                        newStatus = "Low_Stock";
+                    }
+
+                    await tx.inventory.update({
+                        where: { product_id: inventoryItem.product_id },
+                        data: { 
+                            current_stock: newStock,
+                            status: newStatus 
+                        }
+                    });
+                }
+                processedCount++;
+            }
+            return processedCount;
         });
-        res.status(200).json({ count: result.count });
+
+        res.status(200).json({ count: result });
     } catch (err: any) {
+        console.error("Transaction Error:", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -244,40 +292,73 @@ app.post('/api/sales', async (req, res) => {
 // UPDATE a sale
 app.put('/api/sales/:id', async (req, res) => {
     const id = parseInt(req.params.id);
-    
-    const { 
-        reportDate, 
-        orderNumber,
-        productName, 
-        category, 
-        quantity, 
-        unitPrice, 
-        totalAmount, 
-        customerName,
-        paymentMethod,
-        status 
-    } = req.body;
+    const { productName, quantity, company_id, reportDate, orderNumber, category, unitPrice, totalAmount, customerName, paymentMethod, status } = req.body;
 
     try {
-        await prisma.sales_reports.update({
-            where: { report_id: id },
-            data: {
-                date: reportDate ? new Date(reportDate) : undefined,
-                order_number: orderNumber,
-                product_name: productName,
-                category: category,
-                quantity: Number(quantity),
-                unit_price: Number(unitPrice),
-                total_amount: Number(totalAmount),
-                customer_type: customerName,
-                payment_method: paymentMethod,
-                status: status
+        await prisma.$transaction(async (tx) => {
+            // Get the current sale record before updating it
+            const oldSale = await tx.sales_reports.findUnique({ 
+                where: { report_id: id } 
+            });
+
+            if (!oldSale) throw new Error("Sale record not found");
+
+            // Calculate the difference (New Qty - Old Qty)
+            const diff = Number(quantity) - Number(oldSale.quantity);
+
+            // Update the Sale Report
+            await tx.sales_reports.update({
+                where: { report_id: id },
+                data: {
+                    date: new Date(reportDate),
+                    order_number: orderNumber,
+                    product_name: productName,
+                    category,
+                    quantity: Number(quantity),
+                    unit_price: Number(unitPrice),
+                    total_amount: Number(totalAmount),
+                    customer_type: customerName,
+                    payment_method: paymentMethod,
+                    status
+                }
+            });
+
+            // Adjust the Inventory
+            const inventoryItem = await tx.inventory.findFirst({
+                where: { 
+                    product_name: productName,
+                    company_id: Number(company_id)
+                }
+            });
+
+            if (inventoryItem) {
+                const currentStock = Number(inventoryItem.current_stock);
+                const minStock = Number(inventoryItem.min_stock);
+                const newStock = currentStock - diff;
+
+                if (newStock < 0) throw new Error("Insufficient stock for this adjustment");
+
+                let newStatus: "Critical" | "Low_Stock" | "In_Stock" = "In_Stock";
+                
+                if (newStock <= minStock) {
+                    newStatus = "Critical";
+                } else if (newStock <= minStock * 1.25) {
+                    newStatus = "Low_Stock";
+                }
+
+                await tx.inventory.update({
+                    where: { product_id: inventoryItem.product_id },
+                    data: { 
+                        current_stock: newStock,
+                        status: newStatus
+                    }
+                });
             }
         });
 
-        res.json({ message: "Updated successfully" });
+        res.json({ message: "Update successful and inventory adjusted" });
     } catch (err: any) {
-        console.error("Prisma Update Error:", err);
+        console.error("Update Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -285,12 +366,170 @@ app.put('/api/sales/:id', async (req, res) => {
 // DELETE a sale
 app.delete('/api/sales/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    
     try {
-        await prisma.sales_reports.delete({
-            where: { report_id: id }
+        await prisma.$transaction(async (tx) => {
+            // Find the sale record first so we know what to "refund"
+            const saleToDelete = await tx.sales_reports.findUnique({
+                where: { report_id: id }
+            });
+
+            if (!saleToDelete) throw new Error("Sale not found");
+
+            const productName = saleToDelete.product_name as string; 
+            const companyId = saleToDelete.company_id as number;
+
+            //  Delete the sale record
+            await tx.sales_reports.delete({
+                where: { report_id: id }
+            });
+
+            // Find the product in inventory
+            const inventoryItem = await tx.inventory.findFirst({
+                where: { 
+                    product_name: saleToDelete.product_name ?? "", 
+                    company_id: saleToDelete.company_id ?? 0 
+                }
+            });
+            
+            // Add the quantity back to inventory
+            if (inventoryItem) {
+                const currentStock = Number(inventoryItem.current_stock);
+                const quantityToRestore = Number(saleToDelete.quantity);
+                const newStock = currentStock + quantityToRestore;
+
+                await tx.inventory.update({
+                    where: { product_id: inventoryItem.product_id },
+                    data: { 
+                        current_stock: newStock,
+                        status: newStock <= Number(inventoryItem.min_stock) ? "Critical" : "In_Stock"
+                    }
+                });
+            }
         });
-        res.json({ message: "Deleted" });
+
+        res.json({ message: "Sale deleted and stock restored" });
+    } catch (err: any) {
+        console.error("Delete Error:", err.message);
+        res.status(500).json({ error: "Failed to delete sale and restore stock" });
+    }
+});
+
+// GET Suppliers
+app.get('/api/suppliers', async (req, res) => {
+    const company_id = parseInt(req.query.company_id as string);
+    try {
+        const suppliers = await prisma.suppliers.findMany({
+            where: { company_id: company_id },
+            orderBy: { supplier_name: 'asc' }
+        });
+        res.json(suppliers);
     } catch (err) {
-        res.status(500).json({ error: "Delete failed" });
+        res.status(500).send(err);
+    }
+});
+
+// POST Supplier
+app.post('/api/suppliers', async (req, res) => {
+    try {
+        const { company_id, supplier_name, category, location, contact_number, rating, status } = req.body;
+        
+        const newSupplier = await prisma.suppliers.create({
+            data: {
+                company_id: Number(company_id),
+                supplier_name,
+                category,
+                location,
+                contact_number,
+                rating: Number(rating),
+                status: status || "Active",
+                total_spend: 0 
+            }
+        });
+        res.status(200).json(newSupplier);
+    } catch (err: any) {
+        console.error("Add Supplier Error:", err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// PUT: Update an existing supplier
+app.put('/api/suppliers/:id', async (req, res) => {
+    const supplierId = parseInt(req.params.id);
+    const { 
+        supplier_name, 
+        category, 
+        location, 
+        contact_number, 
+        rating, 
+        status, 
+        total_spend, 
+        total_orders 
+    } = req.body;
+
+    try {
+        const updatedSupplier = await prisma.suppliers.update({
+            where: { supplier_id: supplierId },
+            data: {
+                supplier_name,
+                category,
+                location,
+                contact_number,
+                rating: rating ? Number(rating) : undefined,
+                status,
+                total_spend: total_spend !== undefined ? Number(total_spend) : undefined,
+                total_orders: total_orders !== undefined ? Number(total_orders) : undefined
+            }
+        });
+        res.status(200).json(updatedSupplier);
+    } catch (err: any) {
+        console.error("Supplier Update Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE: Remove a supplier
+app.delete('/api/suppliers/:id', async (req, res) => {
+    const supplierId = parseInt(req.params.id);
+    try {
+        await prisma.suppliers.delete({
+            where: { supplier_id: supplierId }
+        });
+        res.status(200).json({ message: "Supplier deleted" });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/purchase-orders', async (req, res) => {
+    const { company_id, supplier_id, total_amount, order_date } = req.body;
+    try {
+        const newOrder = await prisma.purchase_orders.create({
+            data: {
+                company_id: Number(company_id),
+                supplier_id: Number(supplier_id),
+                total_amount: Number(total_amount),
+                order_date: new Date(order_date),
+                status: 'Pending'
+            }
+        });
+        res.status(200).json(newOrder);
+    } catch (err: any) {
+        console.error("PO Creation Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/purchase-orders', async (req, res) => {
+    const company_id = parseInt(req.query.company_id as string);
+    try {
+        const orders = await prisma.purchase_orders.findMany({
+            where: { company_id },
+            include: { suppliers: true },
+            orderBy: { order_date: 'desc' }
+        });
+        res.json(orders);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
     }
 });

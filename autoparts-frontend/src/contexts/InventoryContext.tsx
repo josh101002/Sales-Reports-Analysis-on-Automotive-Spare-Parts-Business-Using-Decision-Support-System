@@ -20,6 +20,7 @@ interface InventoryContextType {
   addProduct: (product: Omit<InventoryItem, "id" | "status">) => Promise<void>;
   updateProduct: (id: string, product: Partial<InventoryItem>) => void;
   deleteProduct: (id: string) => void;
+  fetchInventory: () => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -28,9 +29,10 @@ const getStatus = (current: number, min: number): string => {
   const currentStock = Number(current);
   const minStock = Number(min);
 
-  // Match the exact enum names in your schema.prisma
   if (currentStock <= minStock) return "Critical"; 
-  return "In_Stock"; // Change "In Stock" to "In_Stock"
+  if (currentStock <= minStock * 1.25) return "Low_Stock"; 
+
+  return "In_Stock"; 
 };
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
@@ -68,11 +70,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Listen for both initial mount and account switches
   useEffect(() => {
     fetchInventory();
-    
-    // Custom listener for login events triggered from App.tsx
     const handleReFetch = () => fetchInventory();
     window.addEventListener("userLogin", handleReFetch);
     
@@ -120,7 +119,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProduct = async (id: string, updates: Partial<InventoryItem>) => {
-    // 1. STRIP PREFIX: Convert "INV014" to "14" so the DB can find it
+    // Convert "INV014" to "14" so the DB can find it
     const numericId = id.replace('INV', '').replace(/^0+/, ''); 
 
     const itemToUpdate = inventory.find(i => i.id === id);
@@ -139,7 +138,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       user_name: savedUser.user_name || "Owner",
       role: savedUser.role,
       company_id: savedUser.company_id,
-      // ADD THESE:
       min_stock: Number(updatedItem.minimumStock),
       sku: updatedItem.sku,
       supplier: updatedItem.supplier,
@@ -147,7 +145,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
 
     try {
-      // 2. USE numericId: Send the clean number to the API
+      // Send the clean number to the API
       const response = await fetch(`http://localhost:5000/api/inventory/${numericId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -200,7 +198,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <InventoryContext.Provider value={{ inventory, setInventory, addProduct, updateProduct, deleteProduct }}>
+    <InventoryContext.Provider value={{ inventory, setInventory, addProduct, updateProduct, deleteProduct, fetchInventory }}>
       {children}
     </InventoryContext.Provider>
   );

@@ -117,9 +117,10 @@ model suppliers {
   supplier_name   String            @db.VarChar(100)
   category        String?           @db.VarChar(50)
   location        String?           @db.VarChar(100)
-  contact_number  String?           @db.VarChar(20)
+  contact_number  String?           @db.VarChar(100) // Increased from 20 to 100
   rating          Decimal?          @default(0.00) @db.Decimal(3, 2)
   total_spend     Decimal?          @default(0.00) @db.Decimal(15, 2)
+  total_orders    Int?              @default(0)     // The missing column
   status          suppliers_status? @default(Active)
   purchase_orders purchase_orders[]
   companies       companies         @relation(fields: [company_id], references: [company_id], onDelete: NoAction, onUpdate: NoAction, map: "suppliers_ibfk_1")

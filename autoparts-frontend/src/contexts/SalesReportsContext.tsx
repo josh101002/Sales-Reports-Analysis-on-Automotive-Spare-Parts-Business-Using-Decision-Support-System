@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { toast } from "sonner";
+import { useInventory } from "./InventoryContext";
 
 export interface SalesReport {
   id: string;
@@ -29,6 +30,7 @@ const SalesReportsContext = createContext<SalesReportsContextType | undefined>(u
 
 export function SalesReportsProvider({ children }: { children: ReactNode }) {
   const [salesReports, setSalesReports] = useState<SalesReport[]>([]);
+  const { fetchInventory } = useInventory();
 
   const fetchSales = useCallback(async () => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -75,7 +77,6 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
   const addSalesReport = async (report: any) => {
     const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
     try {
-      // Map frontend keys to DB keys
       const dbReport = {
         date: report.reportDate,
         product_name: report.productName,
@@ -99,6 +100,7 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         toast.success("Sale recorded successfully!");
         await fetchSales();
+        await fetchInventory();
       }
     } catch (err) {
       toast.error("Failed to save to database");
@@ -157,6 +159,7 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
   const updateSalesReport = async (id: string, report: any) => {
     // Extract the numeric ID from "SR-001"
     const dbId = id.replace("SR-", "");
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}"); // Get company_id
     
     try {
       const response = await fetch(`http://localhost:5000/api/sales/${dbId}`, {
@@ -172,13 +175,15 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
           totalAmount: report.totalAmount,
           customerName: report.customerName,
           paymentMethod: report.paymentMethod,
-          status: report.status
+          status: report.status,
+          company_id: savedUser.company_id
         }),
       });
 
       if (response.ok) {
         toast.success("Report updated successfully");
-        await fetchSales(); // This refreshes the UI
+        await fetchSales();
+        await fetchInventory();
       } else {
         const errorData = await response.json();
         console.error("Server Error:", errorData);
@@ -192,10 +197,19 @@ export function SalesReportsProvider({ children }: { children: ReactNode }) {
 
   const deleteSalesReport = async (id: string) => {
     const dbId = id.replace("SR-", "");
-    try {
-      const response = await fetch(`http://localhost:5000/api/sales/${dbId}`, { method: 'DELETE' });
-      if (response.ok) { await fetchSales(); toast.success("Deleted"); }
-    } catch (err) { toast.error("Delete failed"); }
+      try {
+          const response = await fetch(`http://localhost:5000/api/sales/${dbId}`, { 
+              method: 'DELETE' 
+          });
+
+          if (response.ok) { 
+              await fetchSales(); 
+              await fetchInventory(); 
+              toast.success("Sale deleted and stock restored"); 
+          }
+      } catch (err) { 
+          toast.error("Delete failed"); 
+      }
   };
 
   return (

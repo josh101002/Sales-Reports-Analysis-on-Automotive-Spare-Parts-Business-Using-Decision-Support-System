@@ -1,13 +1,14 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { toast } from "sonner";
 
 export interface Supplier {
+  reliability: any;
   id: string;
   name: string;
   category: string;
   location: string;
   rating: number;
   deliveryTime: string;
-  reliability: number;
   totalOrders: number;
   totalSpent: number;
   status: string;
@@ -17,85 +18,13 @@ export interface Supplier {
 
 interface SuppliersContextType {
   suppliers: Supplier[];
-  addSupplier: (supplier: Omit<Supplier, "id" | "totalOrders" | "totalSpent" | "reliability" | "status">) => void;
-  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
-  deleteSupplier: (id: string) => void;
+  fetchSuppliers: () => Promise<void>;
+  addSupplier: (supplier: any) => Promise<void>;
+  updateSupplier: (id: string, updates: any) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
 }
 
 const SuppliersContext = createContext<SuppliersContextType | undefined>(undefined);
-
-const initialSuppliers: Supplier[] = [
-  {
-    id: "SUP001",
-    name: "BrakeTech Pro",
-    category: "Brake Systems",
-    location: "Detroit, MI",
-    rating: 4.8,
-    deliveryTime: "2-3 days",
-    reliability: 98,
-    totalOrders: 156,
-    totalSpent: 89400,
-    status: "Active",
-    contact: "sales@braketech.com",
-    phone: "(555) 123-4567"
-  },
-  {
-    id: "SUP002", 
-    name: "FilterMax Inc",
-    category: "Filters & Fluids",
-    location: "Chicago, IL",
-    rating: 4.5,
-    deliveryTime: "3-5 days", 
-    reliability: 94,
-    totalOrders: 98,
-    totalSpent: 67200,
-    status: "Active",
-    contact: "orders@filtermax.com",
-    phone: "(555) 234-5678"
-  },
-  {
-    id: "SUP003",
-    name: "IgniteCore",
-    category: "Engine Parts",
-    location: "Cleveland, OH",
-    rating: 4.9,
-    deliveryTime: "1-2 days",
-    reliability: 99,
-    totalOrders: 203,
-    totalSpent: 124800,
-    status: "Active", 
-    contact: "support@ignitecore.com",
-    phone: "(555) 345-6789"
-  },
-  {
-    id: "SUP004",
-    name: "LightTech Solutions",
-    category: "Lighting",
-    location: "Phoenix, AZ",
-    rating: 4.2,
-    deliveryTime: "4-6 days",
-    reliability: 89,
-    totalOrders: 45,
-    totalSpent: 34500,
-    status: "Warning",
-    contact: "info@lighttech.com",
-    phone: "(555) 456-7890"
-  },
-  {
-    id: "SUP005",
-    name: "AirFlow Pro",
-    category: "Engine Parts",
-    location: "Atlanta, GA", 
-    rating: 4.6,
-    deliveryTime: "2-4 days",
-    reliability: 96,
-    totalOrders: 78,
-    totalSpent: 45600,
-    status: "Active",
-    contact: "sales@airflowpro.com",
-    phone: "(555) 567-8901"
-  }
-];
 
 const getStatus = (rating: number, reliability: number): string => {
   if (rating >= 4.5 && reliability >= 95) return "Active";
@@ -105,54 +34,120 @@ const getStatus = (rating: number, reliability: number): string => {
 };
 
 export function SuppliersProvider({ children }: { children: ReactNode }) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
-  const addSupplier = (supplier: Omit<Supplier, "id" | "totalOrders" | "totalSpent" | "reliability" | "status">) => {
-    const newId = `SUP${String(suppliers.length + 1).padStart(3, '0')}`;
-    const status = getStatus(supplier.rating, 95); // Default reliability for new suppliers
-    
-    setSuppliers([...suppliers, { 
-      ...supplier, 
-      id: newId, 
-      totalOrders: 0,
-      totalSpent: 0,
-      reliability: 95,
-      status 
-    }]);
+  const fetchSuppliers = async () => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const companyId = savedUser.company_id;
+    if (!companyId) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/suppliers?company_id=${companyId}`);
+      const data = await response.json();
+      
+      const mappedData = data.map((s: any) => ({
+        id: s.supplier_id.toString(),
+        name: s.supplier_name,
+        category: s.category || "",
+        location: s.location || "",
+        contact: s.contact_number || "",
+        phone: s.contact_number || "",
+        rating: parseFloat(s.rating) || 0,
+        status: s.status || "Active",
+        deliveryTime: "3-5 days",
+        totalSpent: parseFloat(s.total_spend) || 0,
+        totalOrders: parseInt(s.total_orders) || 0
+      }));
+      setSuppliers(mappedData);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+    }
   };
 
-  const updateSupplier = (id: string, updates: Partial<Supplier>) => {
-    setSuppliers(suppliers.map(supplier => {
-      if (supplier.id === id) {
-        const updated = { ...supplier, ...updates };
-        // Recalculate status if rating or reliability changed
-        if (updates.rating !== undefined || updates.reliability !== undefined) {
-          updated.status = getStatus(
-            updated.rating, 
-            updated.reliability
-          );
-        }
-        return updated;
+  useEffect(() => {
+    fetchSuppliers();
+    const handleReFetch = () => fetchSuppliers();
+    window.addEventListener("userLogin", handleReFetch);
+    return () => window.removeEventListener("userLogin", handleReFetch);
+  }, []);
+
+  const addSupplier = async (supplier: any) => {
+    const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const companyId = savedUser.company_id;
+
+    const payload = {
+      company_id: companyId,
+      supplier_name: supplier.name,
+      category: supplier.category,
+      location: supplier.location,
+      contact_number: supplier.contact, 
+      rating: supplier.rating,
+      status: "Active"
+    };
+
+    try {
+      const response = await fetch('http://localhost:5000/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        // IMPORTANT: Wait for the refresh so UI matches DB state
+        await fetchSuppliers(); 
+        toast.success("Supplier added to database!");
+      } else {
+        toast.error("Failed to save supplier to database");
       }
-      return supplier;
-    }));
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Connection error");
+    }
   };
 
-  const deleteSupplier = (id: string) => {
-    setSuppliers(suppliers.filter(supplier => supplier.id !== id));
+  const updateSupplier = async (id: string, updates: any) => {
+    const payload = {
+        supplier_name: updates.name,
+        category: updates.category,
+        location: updates.location,
+        contact_number: updates.contact,
+        rating: updates.rating,
+        status: updates.status,
+        total_orders: updates.totalOrders,
+        total_spend: updates.totalSpent,
+    };
+
+      try {
+          const response = await fetch(`http://localhost:5000/api/suppliers/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+              await fetchSuppliers(); 
+          }
+      } catch (err) {
+          console.error("Context update error:", err);
+      }
+  };
+  
+  const deleteSupplier = async (id: string) => {
+    const response = await fetch(`http://localhost:5000/api/suppliers/${id}`, {
+      method: 'DELETE',
+    });
+    if (response.ok) setSuppliers(prev => prev.filter(s => s.id !== id));
   };
 
   return (
-    <SuppliersContext.Provider value={{ suppliers, addSupplier, updateSupplier, deleteSupplier }}>
+    <SuppliersContext.Provider value={{ suppliers, fetchSuppliers, addSupplier, updateSupplier, deleteSupplier }}>
       {children}
     </SuppliersContext.Provider>
   );
 }
 
-export function useSuppliers() {
+export const useSuppliers = () => {
   const context = useContext(SuppliersContext);
-  if (context === undefined) {
-    throw new Error("useSuppliers must be used within a SuppliersProvider");
-  }
+  if (!context) throw new Error("useSuppliers must be used within SuppliersProvider");
   return context;
-}
+};
