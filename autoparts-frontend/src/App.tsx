@@ -181,7 +181,6 @@ function AppContent() {
     <>
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
-          {/* UPDATED: Passing the 'user' object here to show business name */}
           <AppSidebar 
             activeView={activeView} 
             onViewChange={setActiveView} 

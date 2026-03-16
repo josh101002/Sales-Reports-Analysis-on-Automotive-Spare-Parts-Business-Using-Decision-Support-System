@@ -23,6 +23,7 @@ export function SuppliersView({ user }: SuppliersViewProps) {
   const { suppliers, addSupplier, updateSupplier, deleteSupplier } = useSuppliers();
   const isStaff = user?.role === 'staff' || user?.role === 'Business';
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const riskySuppliers = suppliers.filter(s => s.status === "Warning" || s.status === "Inactive");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [addSupplierOpen, setAddSupplierOpen] = useState(false);
@@ -50,7 +51,8 @@ export function SuppliersView({ user }: SuppliersViewProps) {
     contact: "",
     phone: "",
     deliveryTime: "",
-    rating: 4.0
+    rating: 4.0,
+    status: "Active"
   });
 
   // Form state for edit supplier
@@ -63,7 +65,8 @@ export function SuppliersView({ user }: SuppliersViewProps) {
     deliveryTime: "",
     rating: 4.0,
     totalOrders: 0,
-    totalSpent: 0
+    totalSpent: 0,
+    status: "Active"
   });
 
   const handleAddSupplier = () => {
@@ -74,7 +77,7 @@ export function SuppliersView({ user }: SuppliersViewProps) {
     addSupplier(newSupplier);
     toast.success(`Supplier ${newSupplier.name} added!`);
     setAddSupplierOpen(false);
-    setNewSupplier({ name: "", category: "", location: "", contact: "", phone: "", deliveryTime: "", rating: 4.0 });
+    setNewSupplier({ name: "", category: "", location: "", contact: "", phone: "", deliveryTime: "", rating: 4.0, status: "Active" });
   };
 
   const handleEditClick = (supplier: Supplier) => {
@@ -88,16 +91,19 @@ export function SuppliersView({ user }: SuppliersViewProps) {
       deliveryTime: supplier.deliveryTime,
       rating: supplier.rating,
       totalOrders: supplier.totalOrders,
-      totalSpent: supplier.totalSpent
+      totalSpent: supplier.totalSpent,
+      status: supplier.status,
     });
     setEditSupplierOpen(true);
   };
 
   const handleUpdateSupplier = () => {
     if (!selectedSupplier) return;
+    console.log("Updating supplier with data:", editForm);
 
     const updatedData = {
       ...editForm,
+      rating: Number(editForm.rating),
       totalOrders: Number(editForm.totalOrders),
       totalSpent: Number(editForm.totalSpent)
     };
@@ -144,11 +150,16 @@ export function SuppliersView({ user }: SuppliersViewProps) {
 
   const getStatusBadge = (status: string) => {
     const variants = {
-      "Active": "secondary",
-      "Warning": "destructive", 
-      "Inactive": "outline"
+      "Active": "bg-green-100 text-green-700 hover:bg-green-200 border-green-200", 
+      "Warning": "bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200",
+      "Inactive": "bg-red-100 text-red-700 hover:bg-red-200 border-red-200"
     } as const;
-    return <Badge variant={variants[status as keyof typeof variants]}>{status}</Badge>;
+
+    const style = variants[status as keyof typeof variants] || "bg-gray-100 text-gray-700";
+
+    return (
+      <Badge className={`${style} transition-all border shadow-sm px-2.5 py-0.5`}> {status} </Badge>
+    );
   };
 
   const getOrderStatusBadge = (status: string) => {
@@ -189,6 +200,31 @@ export function SuppliersView({ user }: SuppliersViewProps) {
           Add Supplier
         </Button>
       </motion.div>
+
+      {riskySuppliers.length > 0 && (
+        <motion.div variants={itemVariants} className="mb-6">
+          <Card className="border-l-4 border-l-destructive bg-destructive/5 shadow-md">
+            <CardHeader className="flex flex-row items-center space-y-0 pb-2">
+              <AlertCircle className="h-5 w-5 text-destructive mr-2" />
+              <CardTitle className="text-sm font-bold text-destructive uppercase tracking-wide">
+                Suppliers Requiring Attention
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-2">
+                The DSS has flagged <strong>{riskySuppliers.length}</strong> supplier(s) due to low performance ratings or reliability issues.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {riskySuppliers.map(s => (
+                  <Badge key={s.id} variant="outline" className="bg-white border-destructive/20 text-destructive">
+                    {s.name} ({s.status})
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Summary Cards - Clickable with Modals */}
       {!isStaff && (
@@ -574,6 +610,25 @@ export function SuppliersView({ user }: SuppliersViewProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Insert this inside the <div className="grid gap-4 py-4"> of your Edit Supplier Dialog */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editSupplierStatus">Account Status</Label>
+                <Select 
+                  value={editForm.status} 
+                  onValueChange={(value) => setEditForm({ ...editForm, status: value })}
+                >
+                  <SelectTrigger id="editSupplierStatus">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Warning">Warning</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="editSupplierName">Supplier Name *</Label>
@@ -647,8 +702,11 @@ export function SuppliersView({ user }: SuppliersViewProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="editSupplierRating">Rating</Label>
-                <Select value={editForm.rating.toString()} onValueChange={(value: string) => setEditForm({...editForm, rating: parseFloat(value)})}>
-                  <SelectTrigger>
+                <Select 
+                  value={editForm.rating.toString()} 
+                  onValueChange={(value) => setEditForm({ ...editForm, rating: parseFloat(value) })}
+                >
+                  <SelectTrigger id="editSupplierRating">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -660,17 +718,6 @@ export function SuppliersView({ user }: SuppliersViewProps) {
                   </SelectContent>
                 </Select>
               </div>
-              {/* <div className="space-y-2">
-                <Label htmlFor="editSupplierReliability">Reliability (%)</Label>
-                <Input
-                  id="editSupplierReliability"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={editForm.reliability}
-                  onChange={(e) => setEditForm({...editForm, reliability: parseInt(e.target.value) || 0})}
-                />
-              </div> */}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

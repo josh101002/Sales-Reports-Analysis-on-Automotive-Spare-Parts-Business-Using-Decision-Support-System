@@ -25,12 +25,20 @@ interface SuppliersContextType {
 }
 
 const SuppliersContext = createContext<SuppliersContextType | undefined>(undefined);
+const RATING_THRESHOLD = 3.5;
+const RELIABILITY_THRESHOLD = 85;
 
 const getStatus = (rating: number, reliability: number): string => {
   if (rating >= 4.5 && reliability >= 95) return "Active";
   if (rating >= 4.0 && reliability >= 90) return "Active";
   if (rating >= 3.5 || reliability >= 85) return "Warning";
   return "Inactive";
+};
+
+const getCalculatedStatus = (rating: number, reliability: number): string => {
+  if (rating <= 2.5 || reliability <= 60) return "Inactive"; // Critical failure
+  if (rating < 3.5 || reliability < 85) return "Warning";   // Underperforming
+  return "Active";
 };
 
 export function SuppliersProvider({ children }: { children: ReactNode }) {
@@ -45,19 +53,26 @@ export function SuppliersProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`http://localhost:5000/api/suppliers?company_id=${companyId}`);
       const data = await response.json();
       
-      const mappedData = data.map((s: any) => ({
-        id: s.supplier_id.toString(),
-        name: s.supplier_name,
-        category: s.category || "",
-        location: s.location || "",
-        contact: s.contact_number || "",
-        phone: s.contact_number || "",
-        rating: parseFloat(s.rating) || 0,
-        status: s.status || "Active",
-        deliveryTime: "3-5 days",
-        totalSpent: parseFloat(s.total_spend) || 0,
-        totalOrders: parseInt(s.total_orders) || 0
-      }));
+      const mappedData = data.map((s: any) => {
+        const rating = parseFloat(s.rating) || 0;
+        const reliability = parseFloat(s.reliability) || 100;
+        const suggestedStatus = getCalculatedStatus(rating, reliability);
+
+        return {
+          id: s.supplier_id.toString(),
+          name: s.supplier_name,
+          category: s.category || "",
+          location: s.location || "",
+          contact: s.contact_number || "",
+          phone: s.contact_number || "",
+          rating: rating,
+          reliability: reliability,
+          status: (s.status === "Active" && suggestedStatus !== "Active") ? suggestedStatus : s.status || suggestedStatus,
+          deliveryTime: s.delivery_time || "3-5 days",
+          totalSpent: parseFloat(s.total_spend) || 0,
+          totalOrders: parseInt(s.total_orders) || 0
+        };
+      });
       setSuppliers(mappedData);
     } catch (error) {
       console.error("Error fetching suppliers:", error);
@@ -82,6 +97,7 @@ export function SuppliersProvider({ children }: { children: ReactNode }) {
       location: supplier.location,
       contact_number: supplier.contact, 
       rating: supplier.rating,
+      delivery_time: supplier.deliveryTime,
       status: "Active"
     };
 
@@ -113,6 +129,7 @@ export function SuppliersProvider({ children }: { children: ReactNode }) {
         contact_number: updates.contact,
         rating: updates.rating,
         status: updates.status,
+        delivery_time: updates.deliveryTime,
         total_orders: updates.totalOrders,
         total_spend: updates.totalSpent,
     };

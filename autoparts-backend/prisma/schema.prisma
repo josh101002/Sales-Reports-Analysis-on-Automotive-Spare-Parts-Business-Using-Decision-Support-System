@@ -121,6 +121,7 @@ model suppliers {
   rating          Decimal?          @default(0.00) @db.Decimal(3, 2)
   total_spend     Decimal?          @default(0.00) @db.Decimal(15, 2)
   total_orders    Int?              @default(0)     // The missing column
+  delivery_time   String?           @db.VarChar(50)
   status          suppliers_status? @default(Active)
   purchase_orders purchase_orders[]
   companies       companies         @relation(fields: [company_id], references: [company_id], onDelete: NoAction, onUpdate: NoAction, map: "suppliers_ibfk_1")
@@ -162,6 +163,7 @@ enum purchase_orders_status {
 
 enum suppliers_status {
   Active
+  Warning
   Inactive
 }
 

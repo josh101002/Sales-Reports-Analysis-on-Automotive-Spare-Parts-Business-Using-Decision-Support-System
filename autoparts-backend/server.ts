@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 dotenv.config();
 const app = express();
@@ -199,6 +199,40 @@ app.get('/api/team', async (req, res) => {
         res.status(200).json(team);
     } catch (err) {
         res.status(500).send(err);
+    }
+});
+
+// update staff member
+app.put('/api/team/:id', async (req, res) => {
+    const id = Number(req.params.id); 
+    const { fullName, email, role } = req.body;
+    try {
+        const updatedStaff = await prisma.users.update({
+            where: { user_id: id },
+            data: {
+                full_name: fullName,
+                email: email,
+                role: role
+            }
+        });
+        res.json(updatedStaff);
+    } catch (err) { 
+        console.error(err);
+        res.status(500).send(err); 
+    }
+});
+
+// delete staff member
+app.delete('/api/team/:id', async (req, res) => {
+    const id = Number(req.params.id); 
+    try {
+        await prisma.users.delete({
+            where: { user_id: id }
+        });
+        res.json({ message: "Staff member deleted" });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).send(err); 
     }
 });
 
@@ -432,7 +466,7 @@ app.get('/api/suppliers', async (req, res) => {
 // POST Supplier
 app.post('/api/suppliers', async (req, res) => {
     try {
-        const { company_id, supplier_name, category, location, contact_number, rating, status } = req.body;
+        const { company_id, supplier_name, category, location, contact_number, rating, status, delivery_time } = req.body;
         
         const newSupplier = await prisma.suppliers.create({
             data: {
@@ -443,7 +477,8 @@ app.post('/api/suppliers', async (req, res) => {
                 contact_number,
                 rating: Number(rating),
                 status: status || "Active",
-                total_spend: 0 
+                delivery_time: delivery_time || "3-5 days",
+                total_spend: new Prisma.Decimal(0)
             }
         });
         res.status(200).json(newSupplier);
@@ -463,6 +498,7 @@ app.put('/api/suppliers/:id', async (req, res) => {
         contact_number, 
         rating, 
         status, 
+        delivery_time,
         total_spend, 
         total_orders 
     } = req.body;
@@ -477,6 +513,7 @@ app.put('/api/suppliers/:id', async (req, res) => {
                 contact_number,
                 rating: rating ? Number(rating) : undefined,
                 status,
+                delivery_time: delivery_time,
                 total_spend: total_spend !== undefined ? Number(total_spend) : undefined,
                 total_orders: total_orders !== undefined ? Number(total_orders) : undefined
             }
@@ -531,5 +568,81 @@ app.get('/api/purchase-orders', async (req, res) => {
         res.json(orders);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// settings
+// Update Business Info
+app.put('/api/business/:id', async (req, res) => {
+    const { id } = req.params;
+    const { company_name, email, business_address } = req.body;
+    try {
+        const updated = await prisma.companies.update({
+            where: { company_id: Number(id) },
+            data: { company_name, email, business_address }
+        });
+        res.json(updated);
+    } catch (err) { res.status(500).send(err); }
+});
+
+// Update Password with Old Password Check
+app.put('/api/change-password/:id', async (req, res) => {
+    const { id } = req.params;
+    const { oldPassword, newPassword, isStaff } = req.body;
+    try {
+        const table = isStaff ? prisma.users : prisma.companies;
+        const user = await (table as any).findFirst({ 
+            where: { [isStaff ? 'user_id' : 'company_id']: Number(id), password_hash: oldPassword } 
+        });
+
+        if (!user) return res.status(401).json({ message: "Incorrect old password" });
+
+        await (table as any).update({
+            where: { [isStaff ? 'user_id' : 'company_id']: Number(id) },
+            data: { password_hash: newPassword }
+        });
+        res.json({ message: "Password updated" });
+    } catch (err) { res.status(500).send(err); }
+});
+
+// Delete Whole Business Account (Danger Zone)
+app.delete('/api/business/:id', async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        // Prisma transaction to clean up related data if not handled by CASCADE
+        await prisma.$transaction([
+            prisma.inventory.deleteMany({ where: { company_id: id } }),
+            prisma.users.deleteMany({ where: { company_id: id } }),
+            prisma.companies.delete({ where: { company_id: id } }),
+        ]);
+        res.json({ message: "Account deleted" });
+    } catch (err) { res.status(500).send(err); }
+});
+
+app.get('/api/export-all', async (req, res) => {
+    const company_id = parseInt(req.query.company_id as string);
+    
+    if (!company_id) return res.status(400).json({ error: "Company ID required" });
+
+    try {
+        const [inventory, sales, suppliers, team] = await prisma.$transaction([
+            prisma.inventory.findMany({ where: { company_id } }),
+            prisma.sales_reports.findMany({ where: { company_id } }),
+            prisma.suppliers.findMany({ where: { company_id } }),
+            prisma.users.findMany({ where: { company_id } })
+        ]);
+
+        res.json({
+            export_info: {
+                timestamp: new Date().toISOString(),
+                company_id: company_id
+            },
+            inventory,
+            sales,
+            suppliers,
+            team
+        });
+    } catch (err: any) {
+        res.status(500).json({ error: "Export failed: " + err.message });
     }
 });
