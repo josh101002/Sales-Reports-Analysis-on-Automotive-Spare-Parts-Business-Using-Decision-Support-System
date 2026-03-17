@@ -1,84 +1,114 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, Package, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Badge } from "./ui/badge";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
+import { useSalesReports } from "../contexts/SalesReportsContext";
+import { GlobalFilters } from "../App";
 
-const kpiData = [
-  {
-    title: "Total Revenue",
-    value: "$248,500",
-    change: "+12.5%",
-    isPositive: true,
-    icon: DollarSign,
-    id: "revenue"
-  },
-  {
-    title: "Units Sold",
-    value: "1,847",
-    change: "+8.2%",
-    isPositive: true,
-    icon: Package,
-    id: "units"
-  },
-  {
-    title: "Top Product",
-    value: "Brake Pads",
-    change: "425 units",
-    isPositive: true,
-    icon: TrendingUp,
-    id: "topproduct"
-  },
-  {
-    title: "Return Rate",
-    value: "2.1%",
-    change: "-0.5%",
-    isPositive: true,
-    icon: TrendingDown,
-    id: "returns"
-  },
-];
+interface KPICardsProps {
+  globalFilters?: GlobalFilters;
+}
 
-const revenueData = [
-  { month: "January", revenue: 42000, transactions: 245, avgOrder: 171 },
-  { month: "February", revenue: 45000, transactions: 268, avgOrder: 168 },
-  { month: "March", revenue: 48000, transactions: 289, avgOrder: 166 },
-  { month: "April", revenue: 52000, transactions: 312, avgOrder: 167 },
-  { month: "May", revenue: 49000, transactions: 298, avgOrder: 164 },
-  { month: "June", revenue: 55000, transactions: 334, avgOrder: 165 },
-  { month: "July", revenue: 61000, transactions: 368, avgOrder: 166 },
-  { month: "August", revenue: 58000, transactions: 351, avgOrder: 165 },
-  { month: "September", revenue: 64000, transactions: 387, avgOrder: 165 },
-  { month: "October", revenue: 68500, transactions: 412, avgOrder: 166 },
-];
-
-const unitsData = [
-  { product: "Ceramic Brake Pads", units: 425, revenue: 42500, category: "Brake System" },
-  { product: "Premium Oil Filter", units: 380, revenue: 19000, category: "Filters" },
-  { product: "Platinum Spark Plugs", units: 320, revenue: 16000, category: "Engine Parts" },
-  { product: "Air Filter Standard", units: 280, revenue: 14000, category: "Filters" },
-  { product: "Brake Rotors", units: 185, revenue: 37000, category: "Brake System" },
-];
-
-const topProductData = [
-  { metric: "Total Units Sold", value: "425 units" },
-  { metric: "Revenue Generated", value: "$42,500" },
-  { metric: "Average Price", value: "$100" },
-  { metric: "Market Share", value: "23.1%" },
-  { metric: "Growth vs Last Month", value: "+12%" },
-];
-
-const returnData = [
-  { reason: "Defective", count: 12, percentage: "28.5%" },
-  { reason: "Wrong Part", count: 18, percentage: "42.8%" },
-  { reason: "Customer Changed Mind", count: 8, percentage: "19.0%" },
-  { reason: "Other", count: 4, percentage: "9.7%" },
-];
-
-export function KPICards() {
+export function KPICards({ globalFilters }: KPICardsProps) {
+  const { salesReports } = useSalesReports();
   const [modalOpen, setModalOpen] = useState<string | null>(null);
+
+  // Calculate Revenue Data by Month for the Revenue Modal
+  const revenueData = useMemo(() => {
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const currentYear = new Date().getFullYear();
+
+    return months.map((month, index) => {
+      const monthlySales = salesReports.filter(r => {
+        const d = new Date(r.reportDate);
+        return d.getMonth() === index && d.getFullYear() === currentYear;
+      });
+
+      const totalMonthlyRevenue = monthlySales.reduce((sum, r) => sum + r.totalAmount, 0);
+      const transactionCount = monthlySales.length;
+
+      return {
+        month,
+        revenue: totalMonthlyRevenue,
+        transactions: transactionCount,
+        avgOrder: transactionCount > 0 ? Math.round(totalMonthlyRevenue / transactionCount) : 0
+      };
+    }).filter(m => m.transactions > 0); // Only show months with data
+  }, [salesReports]);
+
+  // Calculate Units Sold by Product for the Units Modal
+  const unitsData = useMemo(() => {
+    const productMap = new Map();
+    salesReports.forEach(r => {
+      const existing = productMap.get(r.productName) || { product: r.productName, units: 0, revenue: 0, category: r.category };
+      productMap.set(r.productName, {
+        ...existing,
+        units: existing.units + r.quantity,
+        revenue: existing.revenue + r.totalAmount
+      });
+    });
+    return Array.from(productMap.values()).sort((a, b) => b.units - a.units).slice(0, 10);
+  }, [salesReports]);
+
+  // Find the Top Product for the Top Product Modal
+  const topProduct = useMemo(() => {
+    return unitsData[0] || { product: "None", units: 0, revenue: 0 };
+  }, [unitsData]);
+
+  const topProductData = useMemo(() => [
+    { metric: "Total Units Sold", value: `${topProduct.units} units` },
+    { metric: "Revenue Generated", value: `$${topProduct.revenue.toLocaleString()}` },
+    { metric: "Average Price", value: topProduct.units > 0 ? `$${Math.round(topProduct.revenue / topProduct.units)}` : "$0" },
+    { metric: "Status", value: "Best Seller" },
+    { metric: "Category", value: topProduct.category || "N/A" },
+  ], [topProduct]);
+
+  // Calculate KPI Card summaries
+  const kpiData = useMemo(() => {
+    const totalRev = salesReports.reduce((sum, r) => sum + r.totalAmount, 0);
+    const totalUnits = salesReports.reduce((sum, r) => sum + r.quantity, 0);
+    const completionRate = salesReports.length > 0 
+      ? ((salesReports.filter(r => r.status === "Completed").length / salesReports.length) * 100).toFixed(1)
+      : "0";
+
+    return [
+      {
+        title: "Total Revenue",
+        value: `$${totalRev.toLocaleString()}`,
+        change: "+Real-time",
+        isPositive: true,
+        icon: DollarSign,
+        id: "revenue"
+      },
+      {
+        title: "Units Sold",
+        value: totalUnits.toLocaleString(),
+        change: `Across ${salesReports.length} orders`,
+        isPositive: true,
+        icon: Package,
+        id: "units"
+      },
+      {
+        title: "Top Product",
+        value: topProduct.product,
+        change: `${topProduct.units} units sold`,
+        isPositive: true,
+        icon: TrendingUp,
+        id: "topproduct"
+      },
+      {
+        title: "Completion Rate",
+        value: `${completionRate}%`,
+        change: "Successful Sales",
+        isPositive: true,
+        icon: TrendingDown,
+        id: "returns"
+      },
+    ];
+  }, [salesReports, topProduct]);
 
   return (
     <>
@@ -200,7 +230,7 @@ export function KPICards() {
               Top Product Performance
             </DialogTitle>
             <DialogDescription>
-              Detailed performance metrics for Brake Pads
+              Detailed performance metrics for {topProduct.product}
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4">
@@ -226,39 +256,43 @@ export function KPICards() {
         </DialogContent>
       </Dialog>
 
-      {/* Return Rate Modal */}
+      {/* Completion Rate (Return Rate) Modal */}
       <Dialog open={modalOpen === "returns"} onOpenChange={() => setModalOpen(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <TrendingDown className="w-5 h-5 mr-2" />
-              Return Rate Analysis
+              Sales Status Analysis
             </DialogTitle>
             <DialogDescription>
-              Breakdown of product returns by reason
+              Breakdown of product status across all reports
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Return Reason</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Count</TableHead>
                   <TableHead>Percentage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {returnData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium">{row.reason}</TableCell>
-                    <TableCell>{row.count}</TableCell>
-                    <TableCell>
-                      <Badge variant={row.percentage.includes('42') ? "destructive" : "secondary"}>
-                        {row.percentage}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {["Completed", "Pending", "Cancelled"].map((status, index) => {
+                  const count = salesReports.filter(r => r.status === status).length;
+                  const percentage = salesReports.length > 0 ? ((count / salesReports.length) * 100).toFixed(1) : "0";
+                  return (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{status}</TableCell>
+                      <TableCell>{count}</TableCell>
+                      <TableCell>
+                        <Badge variant={status === "Cancelled" ? "destructive" : "secondary"}>
+                          {percentage}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

@@ -466,7 +466,7 @@ app.get('/api/suppliers', async (req, res) => {
 // POST Supplier
 app.post('/api/suppliers', async (req, res) => {
     try {
-        const { company_id, supplier_name, category, location, contact_number, rating, status, delivery_time } = req.body;
+        const { company_id, supplier_name, category, location, contact_email, contact_number, rating, status, delivery_time } = req.body;
         
         const newSupplier = await prisma.suppliers.create({
             data: {
@@ -474,6 +474,7 @@ app.post('/api/suppliers', async (req, res) => {
                 supplier_name,
                 category,
                 location,
+                contact_email,
                 contact_number,
                 rating: Number(rating),
                 status: status || "Active",
@@ -495,6 +496,7 @@ app.put('/api/suppliers/:id', async (req, res) => {
         supplier_name, 
         category, 
         location, 
+        contact_email,
         contact_number, 
         rating, 
         status, 
@@ -510,6 +512,7 @@ app.put('/api/suppliers/:id', async (req, res) => {
                 supplier_name,
                 category,
                 location,
+                contact_email,
                 contact_number,
                 rating: rating ? Number(rating) : undefined,
                 status,

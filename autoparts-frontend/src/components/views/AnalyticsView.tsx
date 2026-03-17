@@ -2,7 +2,6 @@ import { SalesCharts } from "../SalesCharts";
 import { KPICards } from "../KPICards";
 import { GlobalFilters } from "../../App";
 import { motion } from "motion/react";
-
 interface AnalyticsViewProps {
   globalFilters?: GlobalFilters;
 }
@@ -32,23 +31,13 @@ export function AnalyticsView({ globalFilters }: AnalyticsViewProps) {
   };
 
   return (
-    <motion.div
-      className="space-y-6"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
+    <motion.div>
       <motion.div variants={itemVariants}>
         <h1>Advanced Analytics</h1>
-        <p className="text-muted-foreground">
-          Deep insights and performance analytics for your automotive parts business
-        </p>
+        <KPICards globalFilters={globalFilters} />
       </motion.div>
       <motion.div variants={itemVariants}>
-        <KPICards />
-      </motion.div>
-      <motion.div variants={itemVariants}>
-        <SalesCharts />
+        <SalesCharts globalFilters={globalFilters} />
       </motion.div>
     </motion.div>
   );

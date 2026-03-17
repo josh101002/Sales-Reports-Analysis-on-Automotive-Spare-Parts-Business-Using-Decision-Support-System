@@ -10,13 +10,15 @@ datasource db {
 model activity_logs {
   log_id      Int       @id @default(autoincrement())
   company_id  Int
-  user_id     Int?      // <--- ADD THE QUESTION MARK HERE
+  user_id     Int?
   action_type String?   @db.VarChar(50)
   description String?   @db.Text
   created_at  DateTime? @default(now()) @db.Timestamp(0)
-  
   companies   companies @relation(fields: [company_id], references: [company_id])
-  users       users?    @relation(fields: [user_id], references: [user_id]) // ADD ? HERE TOO
+  users       users?    @relation(fields: [user_id], references: [user_id])
+
+  @@index([company_id], map: "activity_logs_company_id_fkey")
+  @@index([user_id], map: "activity_logs_user_id_fkey")
 }
 
 model companies {
@@ -105,7 +107,7 @@ model sales_reports {
   unit_price     Decimal   @db.Decimal(10, 2)
   total_amount   Decimal   @db.Decimal(10, 2)
   payment_method String?   @db.VarChar(20)
-  status        String   @default("Completed")
+  status         String    @default("Completed")
   companies      companies @relation(fields: [company_id], references: [company_id], onDelete: NoAction, onUpdate: NoAction, map: "sales_reports_ibfk_1")
 
   @@index([company_id], map: "company_id")
@@ -117,12 +119,13 @@ model suppliers {
   supplier_name   String            @db.VarChar(100)
   category        String?           @db.VarChar(50)
   location        String?           @db.VarChar(100)
-  contact_number  String?           @db.VarChar(100) // Increased from 20 to 100
+  contact_email   String?           @db.VarChar(100)
+  contact_number  String?           @db.VarChar(100)
   rating          Decimal?          @default(0.00) @db.Decimal(3, 2)
   total_spend     Decimal?          @default(0.00) @db.Decimal(15, 2)
-  total_orders    Int?              @default(0)     // The missing column
-  delivery_time   String?           @db.VarChar(50)
+  total_orders    Int?              @default(0)
   status          suppliers_status? @default(Active)
+  delivery_time   String?           @db.VarChar(50)
   purchase_orders purchase_orders[]
   companies       companies         @relation(fields: [company_id], references: [company_id], onDelete: NoAction, onUpdate: NoAction, map: "suppliers_ibfk_1")
 
